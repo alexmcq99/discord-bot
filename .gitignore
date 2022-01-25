@@ -130,3 +130,6 @@ dmypy.json
 
 # Environment secrets
 .env
+
+# Music files
+music/

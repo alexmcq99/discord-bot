@@ -28,6 +28,9 @@ class YTDLSource(discord.PCMVolumeTransformer):
 load_dotenv()
 DISCORD_TOKEN = os.getenv("discord_token")
 
+# path to music files
+MUSIC_PATH = "music"
+
 # youtube download options
 youtube_dl.utils.bug_reports_message = lambda: ''
 ytdl_format_options = {
@@ -37,15 +40,10 @@ ytdl_format_options = {
     'nocheckcertificate': True,
     'ignoreerrors': False,
     'logtostderr': False,
-    'quiet': True,
+    'quiet': False,
     'no_warnings': True,
     'default_search': 'auto',
     'source_address': '0.0.0.0', # bind to ipv4 since ipv6 addresses cause issues sometimes
-    'postprocessors': [{
-        'key': 'FFmpegExtractAudio',
-        'preferredcodec': 'mp3',
-        'preferredquality': '192',
-    }],
     'verbose': True
 }
 ytdl = youtube_dl.YoutubeDL(ytdl_format_options)
@@ -54,7 +52,6 @@ ytdl = youtube_dl.YoutubeDL(ytdl_format_options)
 ffmpeg_options = {
     'options': '-vn'
 }
-
 
 # make bot
 intents = discord.Intents().default()
@@ -85,23 +82,37 @@ async def leave(ctx):
 
 @bot.command(name='play', help='Plays a song')
 async def play(ctx,url):
-    try :
-        server = ctx.message.guild
-        voice_channel = server.voice_client
-
+    if not ctx.message.guild.voice_client:
+        if not ctx.message.author.voice:
+            await ctx.send(f"{ctx.message.author.name} is not connected to a voice channel")
+            return
+        else:
+            channel = ctx.message.author.voice.channel
+            await channel.connect()
+    try:
+        vc = ctx.message.guild.voice_client
         async with ctx.typing():
-            with youtube_dl.YoutubeDL(ytdl_format_options) as ydl:
-                ydl.download([url])
-                title = ydl.extract_info(url, download=False)
-            for file in os.listdir("./"):
-                if file.endswith(".mp3"):
-                    os.rename(file, 'song.mp3')
-            voice_channel.play(discord.FFmpegPCMAudio("song.mp3"))
-            voice_channel.volume = 100
-            voice_channel.is_playing()
-            voice_channel.play(discord.FFmpegPCMAudio(executable="ffmpeg.exe", source="song.mp3"))
+            filename = await YTDLSource.from_url(url, loop=bot.loop)
+            print(f"Filename: {filename}")
+            info = ytdl.extract_info(url, download=False)
+            id, title = info['id'], info['title']
+            vc.play(discord.FFmpegPCMAudio(executable="ffmpeg.exe", source=filename))
+
+            # Get metadata
+            # info = ytdl.extract_info(url, download=False)
+            # title, filename = info['title'], ytdl.prepare_filename(info)
+            # print(f"Filename: {filename}")
+            # Check if file already exists, download if it doesn't
+            # full_path = os.path.join(MUSIC_PATH, filename)
+            # if not os.path.exists(full_path):
+            #     print("File doesn't exist, downloading it")
+            #     ytdl.download([url])
+            #     os.replace(filename, full_path)
+            # Play music    
+            # vc.play(discord.FFmpegPCMAudio(executable="ffmpeg.exe", source=full_path))
         await ctx.send(f'**Now playing:** {title}')
-    except:
+    except Exception as e:
+        print("THIS IS THE ERROR\n" + str(e))
         await ctx.send("An error occurred.  I blame Devin.")
 
 @bot.command(name='pause', help='Pauses the song')
