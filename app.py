@@ -1,5 +1,6 @@
 import asyncio
 import csv
+from threading import local
 import discord
 from dotenv import load_dotenv
 import os
@@ -7,6 +8,7 @@ import youtube_dl
 from urllib.parse import urlparse, parse_qs
 from contextlib import suppress
 from discord.ext import commands
+from collections import deque
 
 def read_downloaded_songs(song_file):
     try:
@@ -21,7 +23,7 @@ def read_downloaded_songs(song_file):
     return downloaded_songs
 
 def write_downloaded_song(song_file, row):
-    with open(song_file, mode="a") as f:
+    with open(song_file, mode="a", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(row)
 
@@ -83,7 +85,13 @@ ytdl_format_options = {
     'no_warnings': True,
     'default_search': 'auto',
     'source_address': '0.0.0.0', # bind to ipv4 since ipv6 addresses cause issues sometimes
-    'verbose': True
+    'verbose': True,
+    'rmcachedir': True,
+    'postprocessors': [{
+        'key': 'FFmpegExtractAudio',
+        'preferredcodec': 'mp3',
+        'preferredquality': '192',
+    }]
 }
 ytdl = youtube_dl.YoutubeDL(ytdl_format_options)
 
@@ -100,6 +108,8 @@ bot = commands.Bot(command_prefix='-',intents=intents)
 SONG_FILE = "downloaded_songs.csv"
 downloaded_songs = read_downloaded_songs(SONG_FILE)
 
+song_queue = deque([])
+
 # define bot commands
 @bot.command(name='join', help='Joins the voice channel')
 async def join(ctx):
@@ -111,6 +121,8 @@ async def join(ctx):
         else:
             channel = ctx.message.author.voice.channel
             await channel.connect()
+            # song_queue.append(("Skeletor says \"wat\"", "music\Skeletor_says_wat-KBjhAqXg8MY.mp3"))
+            # play_next(ctx)
     else:
         await ctx.send("Stop bullying me, I'm already in a voice channel :(")
 
@@ -122,6 +134,28 @@ async def leave(ctx):
     else:
         await ctx.send("Stop bullying me, I'm not in a voice channel :(")
 
+async def download_song(url):
+    data = await asyncio.get_event_loop().run_in_executor(None, lambda: ytdl.extract_info(url, download=True))
+    if 'entries' in data:
+        # take first item from a playlist
+        data = data['entries'][0]
+    id, title, local_filename = data['id'], data['title'], ytdl.prepare_filename(data)
+    print(f"ID from data is {id}")
+    local_filename = local_filename[:local_filename.rfind(".")] + ".mp3"
+    file_path = os.path.join(MUSIC_PATH, local_filename)
+    os.replace(local_filename, file_path)
+    downloaded_songs[id] = (title, file_path)
+    write_downloaded_song(SONG_FILE, [id, title, file_path])
+    return title, file_path
+
+def play_next(ctx):
+    print("Here!")
+    print(len(song_queue))
+    if len(song_queue) >= 1:
+        title, file_path = song_queue.popleft()
+        asyncio.run_coroutine_threadsafe(ctx.send(f'**Now playing:** :notes: {title} :notes:'), loop=bot.loop)
+        ctx.message.guild.voice_client.play(discord.FFmpegPCMAudio(executable="ffmpeg.exe", source=file_path), after=lambda e: play_next(ctx))
+
 @bot.command(name='play', help='Plays a song')
 async def play(ctx,url):
     if not ctx.message.guild.voice_client:
@@ -132,31 +166,36 @@ async def play(ctx,url):
             channel = ctx.message.author.voice.channel
             await channel.connect()
     try:
+        id = get_yt_id(url)
+        print(f"This is the id from the url: {id}")
         if not ctx.message.guild.voice_client.is_playing():
             async with ctx.typing():
-                id = get_yt_id(url)
                 # Check if we've already downloaded the song, download it now if we haven't
+                print(f"id is {id}")
                 if id in downloaded_songs:
                     title, file_path = downloaded_songs[id]
                     print("File exists, got info")
                 else:
                     await ctx.send(f'Please wait...currently downloading music')
-                    data = await asyncio.get_event_loop().run_in_executor(None, lambda: ytdl.extract_info(url, download=True))
-                    if 'entries' in data:
-                        # take first item from a playlist
-                        data = data['entries'][0]
-                    title, local_filename = data['title'], ytdl.prepare_filename(data)
-                    file_path = os.path.join(MUSIC_PATH, local_filename)
-                    os.replace(local_filename, file_path)
-                    downloaded_songs[id] = (title, file_path)
-                    write_downloaded_song(SONG_FILE, [id, title, file_path])
+                    title, file_path = await download_song(url)
                     print("File doesn't exist, downloaded it")
 
                 print("Playing audio")
-                ctx.message.guild.voice_client.play(discord.FFmpegPCMAudio(executable="ffmpeg.exe", source=file_path))
-            await ctx.send(f'**Now playing:** {title}')
+                await ctx.send(f'**Now playing:** :notes: {title} :notes:')
+                ctx.message.guild.voice_client.play(discord.FFmpegPCMAudio(executable="ffmpeg.exe", source=file_path), after=lambda e: play_next(ctx))
         else:
-            await ctx.send("Song queued.")
+            await ctx.send("Something is currently playing...added to queue")
+            # Check if we've already downloaded the song, download it now if we haven't
+            if id in downloaded_songs:
+                title, file_path = downloaded_songs[id]
+                print("File exists, got info")
+            else:
+                await ctx.send(f'Please wait...currently downloading music')
+                title, file_path = await download_song(url)
+                print("File doesn't exist, downloaded it")
+            song_queue.append((title, file_path))
+            print(song_queue)
+            await ctx.send(f"Successfully added :notes: {title} :notes: to the queue.")
     except Exception as e:
         print("THIS IS THE ERROR\n" + str(e))
         print(type(e))
@@ -184,7 +223,7 @@ async def stop(ctx):
     if voice_client.is_playing():
         await voice_client.stop()
     else:
-        await ctx.send("stopping :'(")
+        await ctx.send("smh there's nothing to stop")
 
 if __name__ == "__main__":
     bot.run(DISCORD_TOKEN)
