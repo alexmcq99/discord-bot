@@ -1,6 +1,5 @@
 import asyncio
 import csv
-from threading import local
 import discord
 from dotenv import load_dotenv
 import os
@@ -72,6 +71,10 @@ DISCORD_TOKEN = os.getenv("discord_token")
 # path to music files
 MUSIC_PATH = "music"
 
+# Create directory if it doesn't exist
+if not os.path.exists(MUSIC_PATH):
+    os.makedirs(MUSIC_PATH)
+    
 # youtube download options
 youtube_dl.utils.bug_reports_message = lambda: ''
 ytdl_format_options = {
