@@ -18,4 +18,25 @@ This token will be loaded and used by `app.py`.
 6. Download [ffmpeg](ffmpeg.org) and place `ffmpeg.exe` in the root directory of this repository
 7. Activate the conda environment
 
-    After these steps, your dev environment should be good to go.  Run `python app.py` and look to see if your discord bot is online.  Running commands in any text channel that the bot is a member of should work.
+    After these steps, your dev environment should be good to go.  Run `python app.py` and look to see if your discord bot is online on any servers you've added it to.  Running commands in any text channel of a discord server of which bot is a member should work.
+
+## Overview of functionality
+
+The bot currently only supports playing music from youtube, given a url.  After using the `-play` command, the bot will download the audio as an mp3, storing it in the `music` directory, which it will create if it doesn't exist.  The bot will manage files it has already downloaded with `downloaded_songs.csv`, where it tracks the youtube id, title, and file path of all videos whose audio it's downloaded.  It just does this to avoid downloading any audio more than once.  
+
+### Working commands
+
+The bot currently supports the following commands, using the prefix "-" in a text channel:  
+- `-join` -- joins the voice channel that the user is currently in, with an error message if the user is not in a channel
+-  `-leave` -- leaves the voice channel the bot is currently in, with an error message if the bot is not in a channel
+-  `-play <insert youtube url>` -- will download and play the audio of this youtube video, or just play it if it has already downloaded the audio; if there is already a song playing, it will download it (if necessary) and it to the queue to be played later
+-  `-pause` -- will pause the current song, with an error message if nothing is playing
+-  `-resume` -- will resume the current song, with an error message if nothing is paused
+-  `-stop` -- will stop the current song, with an error message if nothing is playing; this is different from pausing because it cannot be resumed
+
+### Known bugs and issues
+
+- It can take 30 seconds to a minute to download a song, which is a pretty annoying delay
+- If you run `-play <insert youtube url>` for a different song while another song is playing, but the current song finishes before the new song can be downloaded and queued, it will not play unless you request yet another song
+- Occasionally, when trying to download a song, the bot will give a 403 not authorized HTTP error, but will usually work when retrying
+- When given a url to a playlist on youtube, the bot will just play the audio from the first video instead of queueing the entire playlist
