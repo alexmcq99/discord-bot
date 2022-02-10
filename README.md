@@ -16,7 +16,7 @@ This token will be loaded and used by `app.py`.
 
     This will create a new conda environment called `discord_bot_env` containing all necessary packages.
 6. Download [ffmpeg](ffmpeg.org) and place `ffmpeg.exe` in the root directory of this repository
-7. Activate the conda environment
+7. Activate the conda environment with `conda activate discord_bot_env`
 
     After these steps, your dev environment should be good to go.  Run `python app.py` and look to see if your discord bot is online on any servers you've added it to.  Running commands in any text channel of a discord server of which bot is a member should work.
 
