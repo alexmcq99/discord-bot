@@ -182,7 +182,7 @@ async def play(ctx,url):
                     title, file_path = downloaded_songs[id]
                     print("File exists, got info")
                 else:
-                    await ctx.send(f'Please wait...currently downloading music')
+                    await ctx.send(f'Please wait -- currently downloading music')
                     title, file_path = await download_song(url)
                     print("File doesn't exist, downloaded it")
 
@@ -190,13 +190,13 @@ async def play(ctx,url):
                 await ctx.send(f'**Now playing:** :notes: {title} :notes:')
                 ctx.message.guild.voice_client.play(discord.FFmpegPCMAudio(executable="ffmpeg.exe", source=file_path), after=lambda e: play_next(ctx))
         else:
-            await ctx.send("Something is currently playing...added to queue")
+            await ctx.send("Something is currently playing -- adding to queue instead")
             # Check if we've already downloaded the song, download it now if we haven't
             if id in downloaded_songs:
                 title, file_path = downloaded_songs[id]
                 print("File exists, got info")
             else:
-                await ctx.send(f'Please wait...currently downloading music')
+                await ctx.send(f'Please wait -- currently downloading music')
                 title, file_path = await download_song(url)
                 print("File doesn't exist, downloaded it")
             song_queue.append((title, file_path))
