@@ -37,6 +37,6 @@ The bot currently supports the following commands, using the prefix "-" in a tex
 ### Known bugs and issues
 
 - It can take 30 seconds to a minute to download a song, which is a pretty annoying delay
-- If you run `-play <insert youtube url>` for a different song while another song is playing, but the current song finishes before the new song can be downloaded and queued, it will not play unless you request yet another song
 - Occasionally, when trying to download a song, the bot will give a 403 not authorized HTTP error, but will usually work when retrying
 - When given a url to a playlist on youtube, the bot will just play the audio from the first video instead of queueing the entire playlist
+- When running `-pause`, `-resume`, or `-stop`, `app.py` throws an error that `ctx`, the parameter for each command that contains relevant discord information, is None, but the commands still work and I have no idea why
