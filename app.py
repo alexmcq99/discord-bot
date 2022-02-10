@@ -171,6 +171,9 @@ async def play(ctx,url):
     try:
         id = get_yt_id(url)
         print(f"This is the id from the url: {id}")
+        if not id:
+            await ctx.send(f"Invalid url. Please try again.")
+            return
         if not ctx.message.guild.voice_client.is_playing():
             async with ctx.typing():
                 # Check if we've already downloaded the song, download it now if we haven't
