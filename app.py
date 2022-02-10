@@ -199,6 +199,8 @@ async def play(ctx,url):
             song_queue.append((title, file_path))
             print(song_queue)
             await ctx.send(f"Successfully added :notes: {title} :notes: to the queue.")
+            if not ctx.message.guild.voice_client.is_playing():
+                play_next(ctx)
     except Exception as e:
         print("THIS IS THE ERROR\n" + str(e))
         print(type(e))
