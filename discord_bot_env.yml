@@ -31,10 +31,13 @@ dependencies:
     - discord-py==1.6.0
     - idna==3.3
     - multidict==5.2.0
+    - mutagen==1.45.1
     - pycparser==2.21
+    - pycryptodomex==3.14.1
     - pynacl==1.4.0
     - python-dotenv==0.15.0
     - six==1.16.0
     - typing-extensions==4.0.1
+    - websockets==10.1
     - yarl==1.7.2
-    - youtube-dl==2021.2.10
+    - yt-dlp==2022.2.4
