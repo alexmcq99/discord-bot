@@ -35,7 +35,7 @@ def get_yt_id(url, ignore_playlist=True):
     # - http://www.youtube.com/v/SA2iWivDJiE?version=3&amp;hl=en_US
     query = urlparse(url)
     if query.hostname == 'youtu.be': return query.path[1:]
-    if query.hostname in {'www.youtube.com', 'youtube.com', 'music.youtube.com'}:
+    if query.hostname in {'www.youtube.com', 'youtube.com', 'music.youtube.com', 'm.youtube.com'}:
         if not ignore_playlist:
         # use case: get playlist id not current video in playlist
             with suppress(KeyError):
@@ -45,24 +45,6 @@ def get_yt_id(url, ignore_playlist=True):
         if query.path[:7] == '/embed/': return query.path.split('/')[2]
         if query.path[:3] == '/v/': return query.path.split('/')[2]
    # returns None for invalid YouTube url
-    
-# youtube download source object
-class YTDLSource(discord.PCMVolumeTransformer):
-    def __init__(self, source, *, data, volume=0.5):
-        super().__init__(source, volume)
-        self.data = data
-        self.title = data.get('title')
-        self.url = ""
-
-    @classmethod
-    async def from_url(cls, url, *, loop=None, stream=False):
-        loop = loop or asyncio.get_event_loop()
-        data = await loop.run_in_executor(None, lambda: ytdl.extract_info(url, download=not stream))
-        if 'entries' in data:
-            # take first item from a playlist
-            data = data['entries'][0]
-        filename = data['title'] if stream else ytdl.prepare_filename(data)
-        return filename
 
 # get api token from .env
 load_dotenv()
@@ -124,10 +106,6 @@ async def join(ctx):
         else:
             channel = ctx.message.author.voice.channel
             await channel.connect()
-            # song_queue.append(("Skeletor says \"wat\"", "music\Skeletor_says_wat-KBjhAqXg8MY.mp3"))
-            # play_next(ctx)
-    else:
-        await ctx.send("Stop bullying me, I'm already in a voice channel :(")
 
 @bot.command(name='leave', help='Leaves the voice channel')
 async def leave(ctx):
@@ -154,82 +132,82 @@ async def download_song(url):
 def play_next(ctx):
     print("Here!")
     print(len(song_queue))
-    if len(song_queue) >= 1:
+    if len(song_queue) >= 1 and not ctx.message.guild.voice_client.is_playing():
         title, file_path = song_queue.popleft()
         asyncio.run_coroutine_threadsafe(ctx.send(f'**Now playing:** :notes: {title} :notes:'), loop=bot.loop)
         ctx.message.guild.voice_client.play(discord.FFmpegPCMAudio(executable="ffmpeg.exe", source=file_path), after=lambda e: play_next(ctx))
 
 @bot.command(name='play', help='Plays a song')
 async def play(ctx,url):
-    if not ctx.message.guild.voice_client:
-        if not ctx.message.author.voice:
-            await ctx.send(f"{ctx.message.author.name} is not connected to a voice channel")
-            return
-        else:
-            channel = ctx.message.author.voice.channel
-            await channel.connect()
+    await join(ctx)
     try:
         id = get_yt_id(url)
         print(f"This is the id from the url: {id}")
         if not id:
             await ctx.send(f"Invalid url. Please try again.")
             return
-        if not ctx.message.guild.voice_client.is_playing():
-            async with ctx.typing():
-                # Check if we've already downloaded the song, download it now if we haven't
-                print(f"id is {id}")
-                if id in downloaded_songs:
-                    title, file_path = downloaded_songs[id]
-                    print("File exists, got info")
-                else:
-                    await ctx.send(f'Please wait -- currently downloading music')
-                    title, file_path = await download_song(url)
-                    print("File doesn't exist, downloaded it")
 
-                print("Playing audio")
-                await ctx.send(f'**Now playing:** :notes: {title} :notes:')
-                ctx.message.guild.voice_client.play(discord.FFmpegPCMAudio(executable="ffmpeg.exe", source=file_path), after=lambda e: play_next(ctx))
+        # Check if we've already downloaded the song, download it now if we haven't
+        if id in downloaded_songs:
+            title, file_path = downloaded_songs[id]
+            print("File exists, got info")
         else:
-            await ctx.send("Something is currently playing -- adding to queue instead")
-            # Check if we've already downloaded the song, download it now if we haven't
-            if id in downloaded_songs:
-                title, file_path = downloaded_songs[id]
-                print("File exists, got info")
-            else:
-                await ctx.send(f'Please wait -- currently downloading music')
-                title, file_path = await download_song(url)
-                print("File doesn't exist, downloaded it")
-            song_queue.append((title, file_path))
-            print(song_queue)
-            await ctx.send(f"Successfully added :notes: {title} :notes: to the queue.")
-            if not ctx.message.guild.voice_client.is_playing():
-                play_next(ctx)
+            await ctx.send(f'Please wait -- currently downloading music')
+            title, file_path = await download_song(url)
+            print("File doesn't exist, downloaded it")
+        
+        song_queue.append((title, file_path))
+        print(song_queue)
+        await ctx.send(f"Successfully added :notes: {title} :notes: to the queue.")
+        play_next(ctx)
+
     except Exception as e:
         print("THIS IS THE ERROR\n" + str(e))
         print(type(e))
         await ctx.send("An error occurred.  I blame Devin.")
 
+@bot.command(name='playall', help='Plays all downloaded songs')
+async def playall(ctx):
+    await join(ctx)
+    song_queue.extend(downloaded_songs.values())
+    print(song_queue)
+    await ctx.send(f"Successfully added all downloaded songs to the queue.")
+    play_next(ctx)
+
+@bot.command(name='skip', help='Skips the current song')
+async def skip(ctx):
+    vc = ctx.message.guild.voice_client
+    if vc.is_playing():
+        await vc.stop()
+    else:
+        await ctx.send("smh there's nothing to skip")
+
+@bot.command(name='clear', help='Clears the song queue')
+async def clear(ctx):
+    song_queue.clear()
+
 @bot.command(name='pause', help='Pauses the song')
 async def pause(ctx):
-    voice_client = ctx.message.guild.voice_client
-    if voice_client.is_playing():
-        await voice_client.pause()
+    vc = ctx.message.guild.voice_client
+    if vc.is_playing():
+        await vc.pause()
     else:
         await ctx.send("smh stop trying to pause the song when nothing is playing")
     
 @bot.command(name='resume', help='Resumes the song')
 async def resume(ctx):
-    voice_client = ctx.message.guild.voice_client
-    if voice_client.is_paused():
-        await voice_client.resume()
+    vc = ctx.message.guild.vc
+    if vc.is_paused():
+        await vc.resume()
     else:
         await ctx.send("smh there's nothing to play")
 
 @bot.command(name='stop', help='Stops the song')
 async def stop(ctx):
-    voice_client = ctx.message.guild.voice_client
-    if voice_client.is_playing():
-        await voice_client.stop()
+    vc = ctx.message.guild.voice_client
+    if vc.is_playing():
+        await clear(ctx)
+        await vc.stop()
     else:
         await ctx.send("smh there's nothing to stop")
 
