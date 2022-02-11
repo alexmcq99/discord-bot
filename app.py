@@ -24,37 +24,9 @@ def read_downloaded_songs(song_file):
     return downloaded_songs
 
 def write_downloaded_song(song_file, row):
-    with open(song_file, mode="a", newline="") as f:
+    with open(song_file, mode="a", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
         writer.writerow(row)
-
-# search_query is a list of words
-def yt_search(search_query):
-    html = urlopen("https://www.youtube.com/results?search_query=" + "+".join(search_query))
-    video_ids = re.findall(r"watch\?v=(\S{11})", html.read().decode())
-    id = video_ids[0]
-    url = "https://www.youtube.com/watch?v=" + id
-    return id, url
-
-# noinspection PyTypeChecker
-def get_yt_id(url, ignore_playlist=True):
-    # Examples:
-    # - http://youtu.be/SA2iWivDJiE
-    # - http://www.youtube.com/watch?v=_oPAwA_Udwc&feature=feedu
-    # - http://www.youtube.com/embed/SA2iWivDJiE
-    # - http://www.youtube.com/v/SA2iWivDJiE?version=3&amp;hl=en_US
-    query = urlparse(url)
-    if query.hostname == 'youtu.be': return query.path[1:]
-    if query.hostname in {'www.youtube.com', 'youtube.com', 'music.youtube.com', 'm.youtube.com'}:
-        if not ignore_playlist:
-        # use case: get playlist id not current video in playlist
-            with suppress(KeyError):
-                return parse_qs(query.query)['list'][0]
-        if query.path == '/watch': return parse_qs(query.query)['v'][0]
-        if query.path[:7] == '/watch/': return query.path.split('/')[1]
-        if query.path[:7] == '/embed/': return query.path.split('/')[2]
-        if query.path[:3] == '/v/': return query.path.split('/')[2]
-   # returns None for invalid YouTube url
 
 # get api token from .env
 load_dotenv()
@@ -109,25 +81,33 @@ is_looping = False
 
 current_song = ()
 
-# define bot commands
-@bot.command(name='join', help='Joins the voice channel')
-async def join(ctx):
-    voice_client = ctx.message.guild.voice_client
-    if not voice_client:
-        if not ctx.message.author.voice:
-            await ctx.send(f"{ctx.message.author.name} is not connected to a voice channel")
-            return
-        else:
-            channel = ctx.message.author.voice.channel
-            await channel.connect()
+# search_query is a list of words
+def yt_search(search_query):
+    html = urlopen("https://www.youtube.com/results?search_query=" + "+".join(search_query))
+    video_ids = re.findall(r"watch\?v=(\S{11})", html.read().decode())
+    id = video_ids[0]
+    url = "https://www.youtube.com/watch?v=" + id
+    return id, url
 
-@bot.command(name='leave', help='Leaves the voice channel')
-async def leave(ctx):
-    voice_client = ctx.message.guild.voice_client
-    if voice_client and voice_client.is_connected():
-        await voice_client.disconnect()
-    else:
-        await ctx.send("Stop bullying me, I'm not in a voice channel :(")
+# noinspection PyTypeChecker
+def get_yt_id(url, ignore_playlist=True):
+    # Examples:
+    # - http://youtu.be/SA2iWivDJiE
+    # - http://www.youtube.com/watch?v=_oPAwA_Udwc&feature=feedu
+    # - http://www.youtube.com/embed/SA2iWivDJiE
+    # - http://www.youtube.com/v/SA2iWivDJiE?version=3&amp;hl=en_US
+    query = urlparse(url)
+    if query.hostname == 'youtu.be': return query.path[1:]
+    if query.hostname in {'www.youtube.com', 'youtube.com', 'music.youtube.com', 'm.youtube.com'}:
+        if not ignore_playlist:
+        # use case: get playlist id not current video in playlist
+            with suppress(KeyError):
+                return parse_qs(query.query)['list'][0]
+        if query.path == '/watch': return parse_qs(query.query)['v'][0]
+        if query.path[:7] == '/watch/': return query.path.split('/')[1]
+        if query.path[:7] == '/embed/': return query.path.split('/')[2]
+        if query.path[:3] == '/v/': return query.path.split('/')[2]
+   # returns None for invalid YouTube url
 
 async def download_song(url):
     data = await asyncio.get_event_loop().run_in_executor(None, lambda: ytdl.extract_info(url, download=True))
@@ -135,7 +115,6 @@ async def download_song(url):
         # take first item from a playlist
         data = data['entries'][0]
     id, title, local_filename = data['id'], data['title'], ytdl.prepare_filename(data)
-    print(f"ID from data is {id}")
     local_filename = local_filename[:local_filename.rfind(".")] + ".mp3"
     file_path = os.path.join(MUSIC_PATH, local_filename)
     os.replace(local_filename, file_path)
@@ -156,6 +135,26 @@ def play_next(ctx):
         asyncio.run_coroutine_threadsafe(ctx.send(f'**Now playing:** :notes: {title} :notes:'), loop=bot.loop)
         ctx.message.guild.voice_client.play(discord.FFmpegPCMAudio(executable="ffmpeg.exe", source=file_path), after=lambda e: play_next(ctx))
 
+# define bot commands
+@bot.command(name='join', help='Joins the voice channel')
+async def join(ctx):
+    voice_client = ctx.message.guild.voice_client
+    if not voice_client:
+        if not ctx.message.author.voice:
+            await ctx.send(f"{ctx.message.author.name} is not connected to a voice channel")
+            return
+        else:
+            channel = ctx.message.author.voice.channel
+            await channel.connect()
+
+@bot.command(name='leave', help='Leaves the voice channel')
+async def leave(ctx):
+    voice_client = ctx.message.guild.voice_client
+    if voice_client and voice_client.is_connected():
+        await voice_client.disconnect()
+    else:
+        await ctx.send("Stop bullying me, I'm not in a voice channel :(")
+
 @bot.command(name='play', help='Plays a song')
 async def play(ctx, *args):
     await join(ctx)
@@ -166,7 +165,7 @@ async def play(ctx, *args):
             await ctx.send("No arguments provided.  Please provide a url or search query.")
             return
         elif any(ids):
-            await ctx.send("Please wait -- evaluating urls")
+            await ctx.send("Please wait -- validating urls")
             for id, url in zip(ids, args):
                 if id:
                     valid_ids.append(id)
@@ -194,7 +193,6 @@ async def play(ctx, *args):
             await ctx.send(f"Successfully added :notes: {title} :notes: to the queue.")
         
         play_next(ctx)
-
     except Exception as e:
         print("THIS IS THE ERROR\n" + str(e))
         print(type(e))
