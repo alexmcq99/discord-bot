@@ -4,7 +4,7 @@ import discord
 from dotenv import load_dotenv
 import os
 import re
-import youtube_dl
+import yt_dlp
 from collections import deque
 from contextlib import suppress
 from discord.ext import commands
@@ -40,7 +40,7 @@ if not os.path.exists(MUSIC_PATH):
     os.makedirs(MUSIC_PATH)
     
 # youtube download options
-youtube_dl.utils.bug_reports_message = lambda: ''
+yt_dlp.utils.bug_reports_message = lambda: ''
 ytdl_format_options = {
     'format': 'bestaudio/best',
     'restrictfilenames': True,
@@ -60,7 +60,7 @@ ytdl_format_options = {
         'preferredquality': '192',
     }]
 }
-ytdl = youtube_dl.YoutubeDL(ytdl_format_options)
+ytdl = yt_dlp.YoutubeDL(ytdl_format_options)
 
 # musicp player options
 ffmpeg_options = {
