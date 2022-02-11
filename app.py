@@ -36,11 +36,6 @@ def yt_search(search_query):
     url = "https://www.youtube.com/watch?v=" + id
     return id, url
 
-# Works for pretty much any youtube urls
-def is_yt_url(url):
-    pattern = "^((?:https?:)?\/\/)?((?:www|m)\.)?((?:youtube(-nocookie)?\.com|youtu.be))(\/(?:[\w\-]+\?v=|embed\/|v\/)?)([\w\-]+)(\S+)?$"
-    return re.match(pattern, url) is not None
-
 # noinspection PyTypeChecker
 def get_yt_id(url, ignore_playlist=True):
     # Examples:
