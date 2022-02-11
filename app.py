@@ -79,7 +79,7 @@ song_queue = deque([])
 
 is_looping = False
 
-current_song = ()
+current_song = None
 
 # search_query is a list of words
 def yt_search(search_query):
@@ -134,6 +134,8 @@ def play_next(ctx):
             print(len(song_queue))
         asyncio.run_coroutine_threadsafe(ctx.send(f'**Now playing:** :notes: {title} :notes:'), loop=bot.loop)
         ctx.message.guild.voice_client.play(discord.FFmpegPCMAudio(executable="ffmpeg.exe", source=file_path), after=lambda e: play_next(ctx))
+    elif len(song_queue) == 0:
+        current_song = None
 
 # define bot commands
 @bot.command(name='join', help='Joins the voice channel')
@@ -222,7 +224,7 @@ async def loop(ctx):
 async def showqueue(ctx):
     global is_looping, current_song
     loop_msg = f"The queue is {'' if is_looping else 'not '}looping.\n"
-    curr_song_msg = f"Current song: {current_song[0]}\n"
+    curr_song_msg = f"Current song: {current_song[0] if current_song else 'None'}\n"
     queue_header = f"Current queue:{' empty' if len(song_queue) == 0 else ''}\n"
     queue_contents = "\n".join([f"{i + 1}. {title}" for i, (title, _) in enumerate(song_queue)])
     msg = loop_msg + curr_song_msg + queue_header + queue_contents
