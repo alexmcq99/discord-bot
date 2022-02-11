@@ -3,11 +3,13 @@ import csv
 import discord
 from dotenv import load_dotenv
 import os
+import re
 import youtube_dl
-from urllib.parse import urlparse, parse_qs
+from collections import deque
 from contextlib import suppress
 from discord.ext import commands
-from collections import deque
+from urllib.parse import urlparse, parse_qs
+from urllib.request import urlopen
 
 def read_downloaded_songs(song_file):
     try:
@@ -25,6 +27,14 @@ def write_downloaded_song(song_file, row):
     with open(song_file, mode="a", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(row)
+
+# search_query is a list of words
+def yt_search(search_query):
+    html = urlopen("https://www.youtube.com/results?search_query=" + "+".join(search_query))
+    video_ids = re.findall(r"watch\?v=(\S{11})", html.read().decode())
+    id = video_ids[0]
+    url = "https://www.youtube.com/watch?v=" + id
+    return id, url
 
 # noinspection PyTypeChecker
 def get_yt_id(url, ignore_playlist=True):
@@ -147,27 +157,42 @@ def play_next(ctx):
         ctx.message.guild.voice_client.play(discord.FFmpegPCMAudio(executable="ffmpeg.exe", source=file_path), after=lambda e: play_next(ctx))
 
 @bot.command(name='play', help='Plays a song')
-async def play(ctx,url):
+async def play(ctx, *args):
     await join(ctx)
     try:
-        id = get_yt_id(url)
-        print(f"This is the id from the url: {id}")
-        if not id:
-            await ctx.send(f"Invalid url. Please try again.")
+        ids = [get_yt_id(url) for url in args]
+        valid_ids, valid_urls = [], []
+        if len(args) == 0:
+            await ctx.send("No arguments provided.  Please provide a url or search query.")
             return
-
-        # Check if we've already downloaded the song, download it now if we haven't
-        if id in downloaded_songs:
-            title, file_path = downloaded_songs[id]
-            print("File exists, got info")
+        elif any(ids):
+            await ctx.send("Please wait -- evaluating urls")
+            for id, url in zip(ids, args):
+                if id:
+                    valid_ids.append(id)
+                    valid_urls.append(url)
+                else:
+                    await ctx.send(f"{url} is not a valid youtube url.  Ignoring and processing other urls...")
         else:
-            await ctx.send(f'Please wait -- currently downloading music')
-            title, file_path = await download_song(url)
-            print("File doesn't exist, downloaded it")
+            id, url = yt_search(args)
+            valid_ids.append(id)
+            valid_urls.append(url)
+            print(f"id: {id}, url: {url}")
+
+        for id, url in zip(valid_ids, valid_urls):
+            # Check if we've already downloaded the song, download it now if we haven't
+            if id in downloaded_songs:
+                title, file_path = downloaded_songs[id]
+                print("File exists, got info")
+            else:
+                await ctx.send(f'Please wait -- downloading song')
+                title, file_path = await download_song(url)
+                print("File doesn't exist, downloaded it")
+                
+            song_queue.append((title, file_path))
+            print(song_queue)
+            await ctx.send(f"Successfully added :notes: {title} :notes: to the queue.")
         
-        song_queue.append((title, file_path))
-        print(song_queue)
-        await ctx.send(f"Successfully added :notes: {title} :notes: to the queue.")
         play_next(ctx)
 
     except Exception as e:
