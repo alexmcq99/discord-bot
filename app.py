@@ -183,7 +183,7 @@ async def playall(ctx):
     await ctx.send("Successfully added all downloaded songs to the queue.")
     play_next(ctx)
 
-@bot.command(name='loop', help='Loops the queue until this command is used again')
+@bot.command(name='loop', help='Loops the queue until used again')
 async def loop(ctx):
     global is_looping
     is_looping = not is_looping
@@ -205,8 +205,9 @@ async def showqueue(ctx):
     msg = loop_msg + curr_song_msg + queue_header + queue_contents
     await ctx.send(msg)
 
-@bot.command(name='remove', help='Removes the song at the given position in the queue. (Position of 1 means the first element)')
+@bot.command(name='remove', help='Removes the song at the given position in the queue. (1 is first)')
 async def remove(ctx, position):
+    position = int(position)
     if position > 0 and position <= len(song_queue):
         title, _ = song_queue[position - 1]
         del song_queue[position - 1]
