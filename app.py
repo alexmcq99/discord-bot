@@ -95,6 +95,10 @@ downloaded_songs = read_downloaded_songs(SONG_FILE)
 
 song_queue = deque([])
 
+is_looping = False
+
+current_song = ()
+
 # define bot commands
 @bot.command(name='join', help='Joins the voice channel')
 async def join(ctx):
@@ -130,10 +134,15 @@ async def download_song(url):
     return title, file_path
 
 def play_next(ctx):
+    global current_song, is_looping
     print("Here!")
     print(len(song_queue))
     if len(song_queue) >= 1 and not ctx.message.guild.voice_client.is_playing():
-        title, file_path = song_queue.popleft()
+        current_song = song_queue.popleft()
+        title, file_path = current_song
+        if is_looping:
+            song_queue.append(current_song)
+            print(len(song_queue))
         asyncio.run_coroutine_threadsafe(ctx.send(f'**Now playing:** :notes: {title} :notes:'), loop=bot.loop)
         ctx.message.guild.voice_client.play(discord.FFmpegPCMAudio(executable="ffmpeg.exe", source=file_path), after=lambda e: play_next(ctx))
 
@@ -171,8 +180,39 @@ async def playall(ctx):
     await join(ctx)
     song_queue.extend(downloaded_songs.values())
     print(song_queue)
-    await ctx.send(f"Successfully added all downloaded songs to the queue.")
+    await ctx.send("Successfully added all downloaded songs to the queue.")
     play_next(ctx)
+
+@bot.command(name='loop', help='Loops the queue until this command is used again')
+async def loop(ctx):
+    global is_looping
+    is_looping = not is_looping
+    if is_looping:
+        song_queue.append(current_song)
+        loop_msg = "Looping the queue until this command is used again."
+    else:
+        loop_msg = "No longer looping the queue."
+        song_queue.pop()
+    await ctx.send(loop_msg)
+
+@bot.command(name='showqueue', help='Shows the current queue and if looping is on.')
+async def showqueue(ctx):
+    global is_looping, current_song
+    loop_msg = f"The queue is {'' if is_looping else 'not '}looping.\n"
+    curr_song_msg = f"Current song: {current_song[0]}\n"
+    queue_header = f"Current queue:{' empty' if len(song_queue) == 0 else ''}\n"
+    queue_contents = "\n".join([f"{i + 1}. {title}" for i, (title, _) in enumerate(song_queue)])
+    msg = loop_msg + curr_song_msg + queue_header + queue_contents
+    await ctx.send(msg)
+
+@bot.command(name='remove', help='Removes the song at the given position in the queue. (Position of 1 means the first element)')
+async def remove(ctx, position):
+    if position > 0 and position <= len(song_queue):
+        title, _ = song_queue[position - 1]
+        del song_queue[position - 1]
+        await ctx.send(f":notes: {title} :notes: at position {position} has been removed from the queue.")
+    else:
+        await ctx.send(f"Invalid position.  Please choose a position between 1 and {len(song_queue)}, inclusive.  Use the command \"-showqueue\" to show the current queue.")
 
 @bot.command(name='skip', help='Skips the current song')
 async def skip(ctx):
@@ -185,6 +225,7 @@ async def skip(ctx):
 @bot.command(name='clear', help='Clears the song queue')
 async def clear(ctx):
     song_queue.clear()
+    await ctx.send("Cleared the song queue.")
 
 @bot.command(name='pause', help='Pauses the song')
 async def pause(ctx):
@@ -206,7 +247,7 @@ async def resume(ctx):
 async def stop(ctx):
     vc = ctx.message.guild.voice_client
     if vc.is_playing():
-        await clear(ctx)
+        song_queue.clear()
         await vc.stop()
     else:
         await ctx.send("smh there's nothing to stop")
