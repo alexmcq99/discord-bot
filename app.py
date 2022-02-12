@@ -13,7 +13,7 @@ from urllib.request import urlopen
 
 def read_downloaded_songs(song_file):
     try:
-        with open(song_file, mode="r") as f:
+        with open(song_file, mode="r", encoding="utf-8") as f:
             reader = csv.reader(f)
             next(reader)
             downloaded_songs = {row[0]: tuple(row[1:]) for row in reader}
@@ -226,6 +226,7 @@ async def showqueue(ctx):
     loop_msg = f"The queue is {'' if is_looping else 'not '}looping.\n"
     curr_song_msg = f"Current song: {current_song[0] if current_song else 'None'}\n"
     queue_header = f"Current queue:{' empty' if len(song_queue) == 0 else ''}\n"
+    print(song_queue)
     queue_contents = "\n".join([f"{i + 1}. {title}" for i, (title, _) in enumerate(song_queue)])
     msg = loop_msg + curr_song_msg + queue_header + queue_contents
     await ctx.send(msg)
@@ -275,6 +276,7 @@ async def stop(ctx):
     if vc.is_playing():
         song_queue.clear()
         await vc.stop()
+        await ctx.send("The queue has been emptied. :AYAYA:")
     else:
         await ctx.send("smh there's nothing to stop")
 
