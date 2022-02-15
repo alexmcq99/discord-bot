@@ -221,10 +221,15 @@ async def showqueue(ctx):
     global is_looping, current_song
     loop_msg = f"The queue is {'' if is_looping else 'not '}looping.\n"
     curr_song_msg = f"Current song: {current_song[0] if current_song else 'None'}\n"
-    queue_header = f"Current queue:{' empty' if len(song_queue) == 0 else ''}\n"
+    queue_count_msg = f"Number of songs in queue: {len(song_queue)}\n"
     print(song_queue)
-    queue_contents = "\n".join([f"{i + 1}. {title}" for i, (title, _) in enumerate(song_queue)])
-    msg = loop_msg + curr_song_msg + queue_header + queue_contents
+    MAX_SHOWN_SONGS = 10
+    if len(song_queue) > 0:
+        queue_header = "Songs in queue:\n" if len(song_queue) <= MAX_SHOWN_SONGS else f"First {MAX_SHOWN_SONGS} songs:\n"
+        queue_contents = "\n".join([f"{i + 1}. {title}" for i, (title, _) in enumerate(list(song_queue)[:MAX_SHOWN_SONGS])])
+    else:
+        queue_header, queue_contents = "", ""
+    msg = loop_msg + curr_song_msg + queue_count_msg + queue_header + queue_contents
     print(f"length of message: {len(msg)}")
     await ctx.send(msg)
 
