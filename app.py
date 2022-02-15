@@ -225,6 +225,7 @@ async def showqueue(ctx):
     print(song_queue)
     queue_contents = "\n".join([f"{i + 1}. {title}" for i, (title, _) in enumerate(song_queue)])
     msg = loop_msg + curr_song_msg + queue_header + queue_contents
+    print(f"length of message: {len(msg)}")
     await ctx.send(msg)
 
 @bot.command(name='remove', help='Removes the song at the given position in the queue. (1 is first)')
