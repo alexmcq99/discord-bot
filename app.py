@@ -124,16 +124,17 @@ async def download_song(url):
 
 def play_next(ctx):
     global current_song, is_looping
-    print("Here!")
-    print(len(song_queue))
+    # If looping, take current song that just finished and add it back to the queue
+    if is_looping and current_song and not ctx.message.guild.voice_client.is_playing():
+        song_queue.append(current_song)
+        print(len(song_queue))
+    # If current song is finished and there's something queued, play it
     if len(song_queue) >= 1 and not ctx.message.guild.voice_client.is_playing():
         current_song = song_queue.popleft()
         title, file_path = current_song
-        if is_looping:
-            song_queue.append(current_song)
-            print(len(song_queue))
         asyncio.run_coroutine_threadsafe(ctx.send(f'**Now playing:** :notes: {title} :notes:'), loop=bot.loop)
         ctx.message.guild.voice_client.play(discord.FFmpegPCMAudio(executable="ffmpeg.exe", source=file_path), after=lambda e: play_next(ctx))
+    # No current song
     elif len(song_queue) == 0:
         current_song = None
 
@@ -212,11 +213,7 @@ async def playall(ctx):
 async def loop(ctx):
     global is_looping, current_song
     is_looping = not is_looping
-    if is_looping:
-        song_queue.append(current_song)
-        loop_msg = "Looping the queue until this command is used again."
-    else:
-        loop_msg = "No longer looping the queue."
+    loop_msg = "Looping the queue until this command is used again." if is_looping else "No longer looping the queue."
     await ctx.send(loop_msg)
 
 @bot.command(name='showqueue', help='Shows the current queue and if looping is on.')
@@ -242,8 +239,12 @@ async def remove(ctx, position):
 
 @bot.command(name='skip', help='Skips the current song')
 async def skip(ctx):
+    global current_song
     if ctx.message.guild.voice_client.is_playing():
+        curr_song_title, _ = current_song
+        current_song = None
         ctx.message.guild.voice_client.stop()
+        await ctx.send(f"Skipped :notes: {curr_song_title} :notes:")
     else:
         await ctx.send("smh there's nothing to skip")
 
@@ -266,12 +267,14 @@ async def resume(ctx):
     else:
         await ctx.send("smh there's nothing to play")
 
-@bot.command(name='stop', help='Stops the song')
+@bot.command(name='stop', help='Stops the song and clears the queue')
 async def stop(ctx):
+    global current_song
     if ctx.message.guild.voice_client.is_playing():
+        current_song = None
         song_queue.clear()
         ctx.message.guild.voice_client.stop()
-        await ctx.send("The queue has been emptied.")
+        await ctx.send("Stopped current song and cleared the song queue.")
     else:
         await ctx.send("smh there's nothing to stop")
 
