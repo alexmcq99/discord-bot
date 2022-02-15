@@ -13,7 +13,7 @@ from urllib.request import urlopen
 
 def read_downloaded_songs(song_file):
     try:
-        with open(song_file, mode="r", encoding="utf-8") as f:
+        with open(song_file, mode="r", encoding="utf-8", errors="ignore") as f:
             reader = csv.reader(f)
             next(reader)
             downloaded_songs = {row[0]: tuple(row[1:]) for row in reader}
@@ -24,7 +24,7 @@ def read_downloaded_songs(song_file):
     return downloaded_songs
 
 def write_downloaded_song(song_file, row):
-    with open(song_file, mode="a", newline="", encoding="utf-8") as f:
+    with open(song_file, mode="a", newline="", encoding="utf-8", errors="ignore") as f:
         writer = csv.writer(f)
         writer.writerow(row)
 
@@ -210,14 +210,13 @@ async def playall(ctx):
 
 @bot.command(name='loop', help='Loops the queue until used again')
 async def loop(ctx):
-    global is_looping
+    global is_looping, current_song
     is_looping = not is_looping
     if is_looping:
         song_queue.append(current_song)
         loop_msg = "Looping the queue until this command is used again."
     else:
         loop_msg = "No longer looping the queue."
-        song_queue.pop()
     await ctx.send(loop_msg)
 
 @bot.command(name='showqueue', help='Shows the current queue and if looping is on.')
@@ -243,9 +242,8 @@ async def remove(ctx, position):
 
 @bot.command(name='skip', help='Skips the current song')
 async def skip(ctx):
-    vc = ctx.message.guild.voice_client
-    if vc.is_playing():
-        await vc.stop()
+    if ctx.message.guild.voice_client.is_playing():
+        ctx.message.guild.voice_client.stop()
     else:
         await ctx.send("smh there's nothing to skip")
 
@@ -256,27 +254,24 @@ async def clear(ctx):
 
 @bot.command(name='pause', help='Pauses the song')
 async def pause(ctx):
-    vc = ctx.message.guild.voice_client
-    if vc.is_playing():
-        await vc.pause()
+    if ctx.message.guild.voice_client.is_playing():
+        ctx.message.guild.voice_client.pause()
     else:
         await ctx.send("smh stop trying to pause the song when nothing is playing")
     
 @bot.command(name='resume', help='Resumes the song')
 async def resume(ctx):
-    vc = ctx.message.guild.vc
-    if vc.is_paused():
-        await vc.resume()
+    if ctx.message.guild.voice_client.is_paused():
+        ctx.message.guild.voice_client.resume()
     else:
         await ctx.send("smh there's nothing to play")
 
 @bot.command(name='stop', help='Stops the song')
 async def stop(ctx):
-    vc = ctx.message.guild.voice_client
-    if vc.is_playing():
+    if ctx.message.guild.voice_client.is_playing():
         song_queue.clear()
-        await vc.stop()
-        await ctx.send("The queue has been emptied. :AYAYA:")
+        ctx.message.guild.voice_client.stop()
+        await ctx.send("The queue has been emptied.")
     else:
         await ctx.send("smh there's nothing to stop")
 
