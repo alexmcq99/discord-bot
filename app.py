@@ -18,7 +18,7 @@ def read_downloaded_songs(song_file):
             next(reader)
             downloaded_songs = {row[0]: tuple(row[1:]) for row in reader}
     except Exception as e:
-        print("Error in reading file: " + str(e))
+        # print("Error in reading file: " + str(e))
         write_downloaded_song(song_file, ["id", "title", "file_path"])
         downloaded_songs = {}
     return downloaded_songs
@@ -127,7 +127,7 @@ def play_next(ctx):
     # If looping, take current song that just finished and add it back to the queue
     if is_looping and current_song and not ctx.message.guild.voice_client.is_playing():
         song_queue.append(current_song)
-        print(len(song_queue))
+        # print(len(song_queue))
     # If current song is finished and there's something queued, play it
     if len(song_queue) >= 1 and not ctx.message.guild.voice_client.is_playing():
         current_song = song_queue.popleft()
@@ -179,33 +179,33 @@ async def play(ctx, *args):
             id, url = yt_search(args)
             valid_ids.append(id)
             valid_urls.append(url)
-            print(f"id: {id}, url: {url}")
+            # print(f"id: {id}, url: {url}")
 
         for id, url in zip(valid_ids, valid_urls):
             # Check if we've already downloaded the song, download it now if we haven't
             if id in downloaded_songs:
                 title, file_path = downloaded_songs[id]
-                print("File exists, got info")
+                # print("File exists, got info")
             else:
                 await ctx.send(f'Please wait -- downloading song')
                 title, file_path = await download_song(url)
-                print("File doesn't exist, downloaded it")
+                # print("File doesn't exist, downloaded it")
                 
             song_queue.append((title, file_path))
-            print(song_queue)
+            # print(song_queue)
             await ctx.send(f"Successfully added :notes: {title} :notes: to the queue.")
         
         play_next(ctx)
     except Exception as e:
-        print("THIS IS THE ERROR\n" + str(e))
-        print(type(e))
+        # print("THIS IS THE ERROR\n" + str(e))
+        # print(type(e))
         await ctx.send("An error occurred.  I blame Devin.")
 
 @bot.command(name='playall', help='Plays all downloaded songs')
 async def playall(ctx):
     await join(ctx)
     song_queue.extend(downloaded_songs.values())
-    print(song_queue)
+    # print(song_queue)
     await ctx.send("Successfully added all downloaded songs to the queue.")
     play_next(ctx)
 
@@ -222,7 +222,7 @@ async def showqueue(ctx):
     loop_msg = f"The queue is {'' if is_looping else 'not '}looping.\n"
     curr_song_msg = f"Current song: {current_song[0] if current_song else 'None'}\n"
     queue_count_msg = f"Number of songs in queue: {len(song_queue)}\n"
-    print(song_queue)
+    # print(song_queue)
     MAX_SHOWN_SONGS = 10
     if len(song_queue) > 0:
         queue_header = "Songs in queue:\n" if len(song_queue) <= MAX_SHOWN_SONGS else f"First {MAX_SHOWN_SONGS} songs:\n"
@@ -230,7 +230,7 @@ async def showqueue(ctx):
     else:
         queue_header, queue_contents = "", ""
     msg = loop_msg + curr_song_msg + queue_count_msg + queue_header + queue_contents
-    print(f"length of message: {len(msg)}")
+    # print(f"length of message: {len(msg)}")
     await ctx.send(msg)
 
 @bot.command(name='remove', help='Removes the song at the given position in the queue. (1 is first)')
