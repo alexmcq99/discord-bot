@@ -83,8 +83,13 @@ current_song = None
 
 # search_query is a list of words
 def yt_search(search_query):
-    html = urlopen("https://www.youtube.com/results?search_query=" + "+".join(search_query))
+    try:
+        html = urlopen("https://www.youtube.com/results?search_query=" + "+".join(search_query))
+    except Exception as e:
+        return None
     video_ids = re.findall(r"watch\?v=(\S{11})", html.read().decode())
+    if len(video_ids) == 0:
+        return None
     id = video_ids[0]
     url = "https://www.youtube.com/watch?v=" + id
     return id, url
@@ -110,11 +115,15 @@ def get_yt_id(url, ignore_playlist=True):
    # returns None for invalid YouTube url
 
 async def download_song(url):
-    data = await asyncio.get_event_loop().run_in_executor(None, lambda: ytdl.extract_info(url, download=True))
+    data = await asyncio.get_event_loop().run_in_executor(None, lambda: ytdl.extract_info(url, download=False))
     if 'entries' in data:
         # take first item from a playlist
         data = data['entries'][0]
-    id, title, local_filename = data['id'], data['title'], ytdl.prepare_filename(data)
+    id, title, local_filename, duration = data['id'], data['title'], ytdl.prepare_filename(data), data['duration']
+    DURATION_LIMIT = 600
+    if not duration or duration > DURATION_LIMIT:
+        return None
+    await asyncio.get_event_loop().run_in_executor(None, lambda: ytdl.extract_info(url, download=True))
     local_filename = local_filename[:local_filename.rfind(".")] + ".mp3"
     file_path = os.path.join(MUSIC_PATH, local_filename)
     os.replace(local_filename, file_path)
@@ -127,7 +136,6 @@ def play_next(ctx):
     # If looping, take current song that just finished and add it back to the queue
     if is_looping and current_song and not ctx.message.guild.voice_client.is_playing():
         song_queue.append(current_song)
-        # print(len(song_queue))
     # If current song is finished and there's something queued, play it
     if len(song_queue) >= 1 and not ctx.message.guild.voice_client.is_playing():
         current_song = song_queue.popleft()
@@ -161,45 +169,53 @@ async def leave(ctx):
 @bot.command(name='play', help='Plays a song')
 async def play(ctx, *args):
     await join(ctx)
-    try:
-        ids = [get_yt_id(url) for url in args]
-        valid_ids, valid_urls = [], []
-        if len(args) == 0:
-            await ctx.send("No arguments provided.  Please provide a url or search query.")
-            return
-        elif any(ids):
-            await ctx.send("Please wait -- validating urls")
-            for id, url in zip(ids, args):
-                if id:
-                    valid_ids.append(id)
-                    valid_urls.append(url)
-                else:
-                    await ctx.send(f"{url} is not a valid youtube url.  Ignoring and processing other urls...")
-        else:
-            id, url = yt_search(args)
-            valid_ids.append(id)
-            valid_urls.append(url)
-            # print(f"id: {id}, url: {url}")
-
-        for id, url in zip(valid_ids, valid_urls):
-            # Check if we've already downloaded the song, download it now if we haven't
-            if id in downloaded_songs:
-                title, file_path = downloaded_songs[id]
-                # print("File exists, got info")
+    # try:
+    ids = [get_yt_id(url) for url in args]
+    valid_ids, valid_urls = [], []
+    if len(args) == 0:
+        await ctx.send("No arguments provided.  Please provide a url or search query.")
+        return
+    elif any(ids):
+        await ctx.send("Please wait -- validating urls")
+        for id, url in zip(ids, args):
+            if id:
+                valid_ids.append(id)
+                valid_urls.append(url)
             else:
-                await ctx.send(f'Please wait -- downloading song')
-                title, file_path = await download_song(url)
-                # print("File doesn't exist, downloaded it")
-                
-            song_queue.append((title, file_path))
-            # print(song_queue)
-            await ctx.send(f"Successfully added :notes: {title} :notes: to the queue.")
-        
-        play_next(ctx)
-    except Exception as e:
-        # print("THIS IS THE ERROR\n" + str(e))
-        # print(type(e))
-        await ctx.send("An error occurred.  I blame Devin.")
+                await ctx.send(f"{url} is not a valid youtube url.  Ignoring and processing other urls...")
+    else:
+        search_result = yt_search(args)
+        if not search_result:
+            await ctx.send(f"The arguments provided did not yield any results.  Please try again.")
+            return
+        id, url = search_result
+        valid_ids.append(id)
+        valid_urls.append(url)
+        # print(f"id: {id}, url: {url}")
+
+    for id, url in zip(valid_ids, valid_urls):
+        # Check if we've already downloaded the song, download it now if we haven't
+        if id in downloaded_songs:
+            title, file_path = downloaded_songs[id]
+            # print("File exists, got info")
+        else:
+            await ctx.send(f'Please wait -- downloading song')
+            result = await download_song(url)
+            if not result:
+                await ctx.send("Song duration is too long or is a livestream.  Cancelling download.")
+                return
+            title, file_path = result
+            # print("File doesn't exist, downloaded it")
+            
+        song_queue.append((title, file_path))
+        # print(song_queue)
+        await ctx.send(f"Successfully added :notes: {title} :notes: to the queue.")
+    
+    play_next(ctx)
+    # except Exception as e:
+    #     print("THIS IS THE ERROR\n" + str(e))
+    #     # print(type(e))
+    #     await ctx.send("An error occurred.  I blame Devin.")
 
 @bot.command(name='playall', help='Plays all downloaded songs')
 async def playall(ctx):
