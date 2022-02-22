@@ -128,9 +128,6 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
-# Environment secrets
-.env
-
 # Music metadata
 downloaded_songs.csv
 
@@ -139,3 +136,6 @@ music/
 
 # EXE files don't do well on github
 ffmpeg.exe
+
+# Log
+log.txt

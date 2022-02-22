@@ -32,8 +32,9 @@ def write_downloaded_song(song_file, row):
 load_dotenv()
 DISCORD_TOKEN = os.getenv("discord_token")
 
-# path to music files
+# constants
 MUSIC_PATH = "music"
+DURATION_LIMIT = 1200 # in seconds, represents 20 minutes
 
 # Create directory if it doesn't exist
 if not os.path.exists(MUSIC_PATH):
@@ -120,15 +121,15 @@ async def download_song(url):
         # take first item from a playlist
         data = data['entries'][0]
     id, title, local_filename, duration = data['id'], data['title'], ytdl.prepare_filename(data), data['duration']
-    DURATION_LIMIT = 600
     if not duration or duration > DURATION_LIMIT:
-        return None
-    await asyncio.get_event_loop().run_in_executor(None, lambda: ytdl.extract_info(url, download=True))
-    local_filename = local_filename[:local_filename.rfind(".")] + ".mp3"
-    file_path = os.path.join(MUSIC_PATH, local_filename)
-    os.replace(local_filename, file_path)
-    downloaded_songs[id] = (title, file_path)
-    write_downloaded_song(SONG_FILE, [id, title, file_path])
+        file_path = None
+    else:
+        local_filename = local_filename[:local_filename.rfind(".")] + ".mp3"
+        file_path = os.path.join(MUSIC_PATH, local_filename)
+        await asyncio.get_event_loop().run_in_executor(None, lambda: ytdl.extract_info(url, download=True))
+        os.replace(local_filename, file_path)
+        downloaded_songs[id] = (title, file_path)
+        write_downloaded_song(SONG_FILE, [id, title, file_path])
     return title, file_path
 
 def play_next(ctx):
@@ -200,11 +201,10 @@ async def play(ctx, *args):
             # print("File exists, got info")
         else:
             await ctx.send(f'Please wait -- downloading song')
-            result = await download_song(url)
-            if not result:
-                await ctx.send("Song duration is too long or is a livestream.  Cancelling download.")
+            title, file_path = await download_song(url)
+            if not file_path:
+                await ctx.send(f":notes: {title} :notes: is too long to download.  Please submit something shorter than {str(DURATION_LIMIT // 60).zfill(2)}:{str(DURATION_LIMIT % 60).zfill(2)}")
                 return
-            title, file_path = result
             # print("File doesn't exist, downloaded it")
             
         song_queue.append((title, file_path))
