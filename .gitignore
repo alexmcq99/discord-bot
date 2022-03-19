@@ -139,3 +139,6 @@ ffmpeg.exe
 
 # Log
 log.txt
+
+# Testing
+test.py

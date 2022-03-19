@@ -8,6 +8,8 @@ import yt_dlp
 from collections import deque
 from contextlib import suppress
 from discord.ext import commands
+import spotipy
+from spotipy.oauth2 import SpotifyClientCredentials
 from urllib.parse import urlparse, parse_qs
 from urllib.request import urlopen
 
@@ -31,10 +33,16 @@ def write_downloaded_song(song_file, row):
 # get api token from .env
 load_dotenv()
 DISCORD_TOKEN = os.getenv("discord_token")
+SPOTIPY_CLIENT_ID = os.getenv("spotipy_client_id")
+SPOTIPY_CLIENT_SECRET = os.getenv("spotipy_client_secret")
+
+creds = SpotifyClientCredentials(SPOTIPY_CLIENT_ID, SPOTIPY_CLIENT_SECRET)
+spotify = spotipy.Spotify(client_credentials_manager=creds)
 
 # constants
 MUSIC_PATH = "music"
-DURATION_LIMIT = 1200 # in seconds, represents 20 minutes
+DURATION_LIMIT = 1200 # in seconds, 20 minutes
+TIMEOUT = 600 # in seconds, 10 minutes
 
 # Create directory if it doesn't exist
 if not os.path.exists(MUSIC_PATH):
@@ -115,6 +123,21 @@ def get_yt_id(url, ignore_playlist=True):
         if query.path[:3] == '/v/': return query.path.split('/')[2]
    # returns None for invalid YouTube url
 
+def is_spotify_url(url):
+    query = urlparse(url)
+    return query.hostname == "open.spotify.com"
+
+def get_spotify_info(url):
+    query = urlparse(url)
+    _, type, id = query.path.split("/")
+    if type == "album":
+        result = spotify.album_tracks(id)
+        search_list = [(" ".join([artist['name'] for artist in track['artists']]) + " - " + track['name']).split() for track in result['items']]
+    else:
+        result = spotify.playlist_tracks(id)
+        search_list = [(" ".join([artist['name'] for artist in item['track']['artists']]) + " - " + item['track']['name']).split() for item in result['items']]
+    return search_list
+
 async def download_song(url):
     data = await asyncio.get_event_loop().run_in_executor(None, lambda: ytdl.extract_info(url, download=False))
     if 'entries' in data:
@@ -163,6 +186,9 @@ async def join(ctx):
 async def leave(ctx):
     voice_client = ctx.message.guild.voice_client
     if voice_client and voice_client.is_connected():
+        current_song = None
+        song_queue.clear()
+        ctx.message.guild.voice_client.stop()
         await voice_client.disconnect()
     else:
         await ctx.send("Stop bullying me, I'm not in a voice channel :(")
@@ -170,58 +196,49 @@ async def leave(ctx):
 @bot.command(name='play', help='Plays a song')
 async def play(ctx, *args):
     await join(ctx)
-    # try:
-    ids = [get_yt_id(url) for url in args]
-    valid_ids, valid_urls = [], []
+    songs_to_add = []
+
     if len(args) == 0:
         await ctx.send("No arguments provided.  Please provide a url or search query.")
         return
-    elif any(ids):
-        await ctx.send("Please wait -- validating urls")
-        for id, url in zip(ids, args):
-            if id:
-                valid_ids.append(id)
-                valid_urls.append(url)
-            else:
-                await ctx.send(f"{url} is not a valid youtube url.  Ignoring and processing other urls...")
+    
+    # Case for youtube url
+    id, url = get_yt_id(args[0]), args[0]
+    search_arguments = []
+    if id:
+        songs_to_add.append((id, url))
+    elif is_spotify_url(url): # Spotify url
+        search_arguments.extend(get_spotify_info(url))
     else:
-        search_result = yt_search(args)
+        search_arguments.append(args)
+
+    for search_args in search_arguments:
+        search_result = yt_search(search_args)
         if not search_result:
             await ctx.send(f"The arguments provided did not yield any results.  Please try again.")
             return
-        id, url = search_result
-        valid_ids.append(id)
-        valid_urls.append(url)
-        # print(f"id: {id}, url: {url}")
+        songs_to_add.append(search_result)
 
-    for id, url in zip(valid_ids, valid_urls):
+    for id, url in songs_to_add:
         # Check if we've already downloaded the song, download it now if we haven't
         if id in downloaded_songs:
             title, file_path = downloaded_songs[id]
-            # print("File exists, got info")
         else:
             await ctx.send(f'Please wait -- downloading song')
             title, file_path = await download_song(url)
             if not file_path:
                 await ctx.send(f":notes: {title} :notes: is too long to download.  Please submit something shorter than {str(DURATION_LIMIT // 60).zfill(2)}:{str(DURATION_LIMIT % 60).zfill(2)}")
                 return
-            # print("File doesn't exist, downloaded it")
-            
+        
         song_queue.append((title, file_path))
-        # print(song_queue)
         await ctx.send(f"Successfully added :notes: {title} :notes: to the queue.")
     
     play_next(ctx)
-    # except Exception as e:
-    #     print("THIS IS THE ERROR\n" + str(e))
-    #     # print(type(e))
-    #     await ctx.send("An error occurred.  I blame Devin.")
 
 @bot.command(name='playall', help='Plays all downloaded songs')
 async def playall(ctx):
     await join(ctx)
     song_queue.extend(downloaded_songs.values())
-    # print(song_queue)
     await ctx.send("Successfully added all downloaded songs to the queue.")
     play_next(ctx)
 
@@ -232,13 +249,12 @@ async def loop(ctx):
     loop_msg = "Looping the queue until this command is used again." if is_looping else "No longer looping the queue."
     await ctx.send(loop_msg)
 
-@bot.command(name='showqueue', help='Shows the current queue and if looping is on.')
+@bot.command(name='showqueue', aliases=['queue', 'status'], help='Shows the current queue and if looping is on.')
 async def showqueue(ctx):
     global is_looping, current_song
     loop_msg = f"The queue is {'' if is_looping else 'not '}looping.\n"
     curr_song_msg = f"Current song: {current_song[0] if current_song else 'None'}\n"
     queue_count_msg = f"Number of songs in queue: {len(song_queue)}\n"
-    # print(song_queue)
     MAX_SHOWN_SONGS = 10
     if len(song_queue) > 0:
         queue_header = "Songs in queue:\n" if len(song_queue) <= MAX_SHOWN_SONGS else f"First {MAX_SHOWN_SONGS} songs:\n"
@@ -246,10 +262,9 @@ async def showqueue(ctx):
     else:
         queue_header, queue_contents = "", ""
     msg = loop_msg + curr_song_msg + queue_count_msg + queue_header + queue_contents
-    # print(f"length of message: {len(msg)}")
     await ctx.send(msg)
 
-@bot.command(name='remove', help='Removes the song at the given position in the queue. (1 is first)')
+@bot.command(name='remove', aliases=['delete'], help='Removes the song at the given position in the queue. (1 is first)')
 async def remove(ctx, position):
     position = int(position)
     if position > 0 and position <= len(song_queue):
@@ -282,7 +297,7 @@ async def pause(ctx):
     else:
         await ctx.send("smh stop trying to pause the song when nothing is playing")
     
-@bot.command(name='resume', help='Resumes the song')
+@bot.command(name='resume', aliases=['continue'], help='Resumes the song')
 async def resume(ctx):
     if ctx.message.guild.voice_client.is_paused():
         ctx.message.guild.voice_client.resume()
@@ -299,6 +314,23 @@ async def stop(ctx):
         await ctx.send("Stopped current song and cleared the song queue.")
     else:
         await ctx.send("smh there's nothing to stop")
+
+@commands.Cog.listener()
+async def on_voice_state_update(member, before, after):
+    if not member.id == bot.user.id:
+        return
+    elif before.channel is None:
+        voice = after.channel.guild.voice_client
+        time = 0
+        while True:
+            await asyncio.sleep(1)
+            time = time + 1
+            if voice.is_playing() and not voice.is_paused():
+                time = 0
+            if time == TIMEOUT:
+                await voice.disconnect()
+            if not voice.is_connected():
+                break
 
 if __name__ == "__main__":
     bot.run(DISCORD_TOKEN)
