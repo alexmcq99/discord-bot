@@ -136,7 +136,7 @@ def get_spotify_info(url):
         search_list = [(" ".join([artist['name'] for artist in track['artists']]) + " " + result['name'] + " " + track['name']).split() for track in result['tracks']['items']]
     elif type == "track":
         result = spotify.track(id)
-        search_list = [(" ".join([artist['name'] for artist in result['artists']]) + " - " + result['name']).split()]
+        search_list = [(" ".join([artist['name'] for artist in result['artists']]) + " " + result['album']['name'] + " " + result['name']).split()]
     elif type == "playlist":
         result = spotify.playlist_tracks(id)
         search_list = [(" ".join([artist['name'] for artist in item['track']['artists']]) + " " + item['track']['album']['name'] + " " + item['track']['name']).split() for item in result['items']]
