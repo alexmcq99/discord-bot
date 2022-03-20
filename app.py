@@ -130,12 +130,16 @@ def is_spotify_url(url):
 def get_spotify_info(url):
     query = urlparse(url)
     _, type, id = query.path.split("/")
+    search_list = []
     if type == "album":
-        result = spotify.album_tracks(id)
-        search_list = [(" ".join([artist['name'] for artist in track['artists']]) + " - " + track['name']).split() for track in result['items']]
-    else:
+        result = spotify.album(id)
+        search_list = [(" ".join([artist['name'] for artist in track['artists']]) + " " + result['name'] + " " + track['name']).split() for track in result['tracks']['items']]
+    elif type == "track":
+        result = spotify.track(id)
+        search_list = [(" ".join([artist['name'] for artist in result['artists']]) + " - " + result['name']).split()]
+    elif type == "playlist":
         result = spotify.playlist_tracks(id)
-        search_list = [(" ".join([artist['name'] for artist in item['track']['artists']]) + " - " + item['track']['name']).split() for item in result['items']]
+        search_list = [(" ".join([artist['name'] for artist in item['track']['artists']]) + " " + item['track']['album']['name'] + " " + item['track']['name']).split() for item in result['items']]
     return search_list
 
 async def download_song(url):
