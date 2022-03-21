@@ -44,6 +44,9 @@ MUSIC_PATH = "music"
 DURATION_LIMIT = 1200 # in seconds, 20 minutes
 TIMEOUT = 600 # in seconds, 10 minutes
 
+# Forbidden song
+STINKY_JACOB_ID = "ehLs7oGSE4g"
+
 # Create directory if it doesn't exist
 if not os.path.exists(MUSIC_PATH):
     os.makedirs(MUSIC_PATH)
@@ -182,7 +185,8 @@ def play_next(ctx):
 @bot.command(name='join', help='Joins the voice channel')
 async def join(ctx):
     if not ctx.message.author.voice:
-        await ctx.send(f"{ctx.message.author.name} is not connected to a voice channel")
+        await ctx.send(f"{ctx.author.mention} is not connected to a voice channel")
+        return False
     else:
         channel = ctx.message.author.voice.channel
         if not ctx.voice_client:
@@ -191,6 +195,7 @@ async def join(ctx):
         elif channel != ctx.voice_client.channel:
             print("Moved to a channel")
             await ctx.voice_client.move_to(channel)
+        return True
 
 
 @bot.command(name='leave', help='Leaves the voice channel')
@@ -207,7 +212,10 @@ async def leave(ctx):
 
 @bot.command(name='play', help='Plays a song')
 async def play(ctx, *args):
-    await join(ctx)
+    joined = await join(ctx)
+    if not joined:
+        return
+
     songs_to_add = []
 
     if len(args) == 0:
@@ -237,6 +245,13 @@ async def play(ctx, *args):
     print(1, ctx.voice_client)
     for id, url in songs_to_add:
         print(2, ctx.voice_client)
+        # Check for forbidden song
+        if id == STINKY_JACOB_ID:
+            await ctx.send(f"**Attention {ctx.author.mention}!**  You have requested a forbidden song.  Reflect on your transgressions.")
+            await ctx.author.move_to(None)
+            await ctx.author.edit(nick="Banned for forbidden song")
+            continue
+
         # Check if we've already downloaded the song, download it now if we haven't
         if id in downloaded_songs:
             title, file_path = downloaded_songs[id]
