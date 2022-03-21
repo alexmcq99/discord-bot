@@ -92,12 +92,15 @@ current_song = None
 
 # search_query is a list of words
 def yt_search(search_query):
+    search_query = [s.encode('ascii', 'ignore').decode() for s in search_query]
     try:
         html = urlopen("https://www.youtube.com/results?search_query=" + "+".join(search_query))
     except Exception as e:
+        print(f"Error: {str(e)}")
         return None
     video_ids = re.findall(r"watch\?v=(\S{11})", html.read().decode())
     if len(video_ids) == 0:
+        print(html.read().decode())
         return None
     id = video_ids[0]
     url = "https://www.youtube.com/watch?v=" + id
@@ -133,13 +136,13 @@ def get_spotify_info(url):
     search_list = []
     if type == "album":
         result = spotify.album(id)
-        search_list = [(" ".join([artist['name'] for artist in track['artists']]) + " " + result['name'] + " " + track['name']).split() for track in result['tracks']['items']]
+        search_list = [(track['artists'][0]['name'] + " " + track['name']).split() for track in result['tracks']['items']]
     elif type == "track":
         result = spotify.track(id)
-        search_list = [(" ".join([artist['name'] for artist in result['artists']]) + " " + result['album']['name'] + " " + result['name']).split()]
+        search_list = [(result['artists'][0]['name'] + " " + result['name']).split()]
     elif type == "playlist":
-        result = spotify.playlist_tracks(id)
-        search_list = [(" ".join([artist['name'] for artist in item['track']['artists']]) + " " + item['track']['album']['name'] + " " + item['track']['name']).split() for item in result['items']]
+        result = spotify.playlist_tracks(id, limit=50)
+        search_list = [(item['track']['artists'][0]['name'] + " " + item['track']['name']).split() for item in result['items']]
     return search_list
 
 async def download_song(url):
@@ -162,10 +165,11 @@ async def download_song(url):
 def play_next(ctx):
     global current_song, is_looping
     # If looping, take current song that just finished and add it back to the queue
-    if is_looping and current_song and not ctx.message.guild.voice_client.is_playing():
+    print(7, ctx.voice_client)
+    if is_looping and current_song and not ctx.voice_client.is_playing():
         song_queue.append(current_song)
     # If current song is finished and there's something queued, play it
-    if len(song_queue) >= 1 and not ctx.message.guild.voice_client.is_playing():
+    if len(song_queue) >= 1 and not ctx.voice_client.is_playing():
         current_song = song_queue.popleft()
         title, file_path = current_song
         asyncio.run_coroutine_threadsafe(ctx.send(f'**Now playing:** :notes: {title} :notes:'), loop=bot.loop)
@@ -177,18 +181,22 @@ def play_next(ctx):
 # define bot commands
 @bot.command(name='join', help='Joins the voice channel')
 async def join(ctx):
-    voice_client = ctx.message.guild.voice_client
-    if not voice_client:
-        if not ctx.message.author.voice:
-            await ctx.send(f"{ctx.message.author.name} is not connected to a voice channel")
-            return
-        else:
-            channel = ctx.message.author.voice.channel
+    if not ctx.message.author.voice:
+        await ctx.send(f"{ctx.message.author.name} is not connected to a voice channel")
+    else:
+        channel = ctx.message.author.voice.channel
+        if not ctx.voice_client:
+            print("Joined a channel")
             await channel.connect()
+        elif channel != ctx.voice_client.channel:
+            print("Moved to a channel")
+            await ctx.voice_client.move_to(channel)
+
 
 @bot.command(name='leave', help='Leaves the voice channel')
 async def leave(ctx):
-    voice_client = ctx.message.guild.voice_client
+    global current_song
+    voice_client = ctx.voice_client
     if voice_client and voice_client.is_connected():
         current_song = None
         song_queue.clear()
@@ -212,32 +220,39 @@ async def play(ctx, *args):
     if id:
         songs_to_add.append((id, url))
     elif is_spotify_url(url): # Spotify url
+        await ctx.send(f'Please wait -- getting Spotify data')
         search_arguments.extend(get_spotify_info(url))
     else:
         search_arguments.append(args)
 
+    await ctx.send(f'Please wait -- getting Youtube data')
     for search_args in search_arguments:
         search_result = yt_search(search_args)
         if not search_result:
-            await ctx.send(f"The arguments provided did not yield any results.  Please try again.")
-            return
+            print(" ".join(search_args), "did not yield any search results")
+        print
         songs_to_add.append(search_result)
 
+    print("DOWNLOADING SONGS")
+    print(1, ctx.voice_client)
     for id, url in songs_to_add:
+        print(2, ctx.voice_client)
         # Check if we've already downloaded the song, download it now if we haven't
         if id in downloaded_songs:
             title, file_path = downloaded_songs[id]
+            print(3, ctx.voice_client)
         else:
             await ctx.send(f'Please wait -- downloading song')
             title, file_path = await download_song(url)
             if not file_path:
                 await ctx.send(f":notes: {title} :notes: is too long to download.  Please submit something shorter than {str(DURATION_LIMIT // 60).zfill(2)}:{str(DURATION_LIMIT % 60).zfill(2)}")
-                return
         
+        print(4, ctx.voice_client)
         song_queue.append((title, file_path))
+        print(5, ctx.voice_client)
         await ctx.send(f"Successfully added :notes: {title} :notes: to the queue.")
-    
-    play_next(ctx)
+        print(6, ctx.voice_client)
+        play_next(ctx)
 
 @bot.command(name='playall', help='Plays all downloaded songs')
 async def playall(ctx):
@@ -281,10 +296,10 @@ async def remove(ctx, position):
 @bot.command(name='skip', help='Skips the current song')
 async def skip(ctx):
     global current_song
-    if ctx.message.guild.voice_client.is_playing():
+    if ctx.voice_client.is_playing():
         curr_song_title, _ = current_song
         current_song = None
-        ctx.message.guild.voice_client.stop()
+        ctx.voice_client.stop()
         await ctx.send(f"Skipped :notes: {curr_song_title} :notes:")
     else:
         await ctx.send("smh there's nothing to skip")
@@ -332,6 +347,7 @@ async def on_voice_state_update(member, before, after):
             if voice.is_playing() and not voice.is_paused():
                 time = 0
             if time == TIMEOUT:
+                print("DISCONNECTING")
                 await voice.disconnect()
             if not voice.is_connected():
                 break
