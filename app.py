@@ -8,6 +8,7 @@ import yt_dlp
 from collections import deque
 from contextlib import suppress
 from discord.ext import commands
+import random
 import spotipy
 from spotipy.oauth2 import SpotifyClientCredentials
 from urllib.parse import urlparse, parse_qs
@@ -326,8 +327,8 @@ async def clear(ctx):
 
 @bot.command(name='pause', help='Pauses the song')
 async def pause(ctx):
-    if ctx.message.guild.voice_client.is_playing():
-        ctx.message.guild.voice_client.pause()
+    if ctx.voice_client.is_playing():
+        ctx.voice_client.pause()
     else:
         await ctx.send("smh stop trying to pause the song when nothing is playing")
     
@@ -348,6 +349,14 @@ async def stop(ctx):
         await ctx.send("Stopped current song and cleared the song queue.")
     else:
         await ctx.send("smh there's nothing to stop")
+
+@bot.command(name='shuffle', help='Shuffles the queue randomly')
+async def shuffle(ctx):
+    global song_queue
+    temp = list(song_queue)
+    random.shuffle(temp)
+    song_queue = deque(temp)
+    await ctx.send("Shuffled the queue.")
 
 @commands.Cog.listener()
 async def on_voice_state_update(member, before, after):
