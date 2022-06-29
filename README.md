@@ -1,5 +1,5 @@
 # discord-bot
-Making a youtube/spotify music bot for personal discord server
+A youtube music bot for a personal discord server
 
 ## Set up development environment
 
@@ -18,25 +18,34 @@ This token will be loaded and used by `app.py`.
 6. Download the correct [ffmpeg](https://github.com/BtbN/FFmpeg-Builds/releases) release for your operating system and place `ffmpeg.exe` from the `bin` directory of the downloaded package in the root directory of this repository
 7. Activate the conda environment with `conda activate discord_bot_env`
 
-    After these steps, your dev environment should be good to go.  Run `python app.py` and look to see if your discord bot is online on any servers you've added it to.  Running commands in any text channel of a discord server of which bot is a member should work.
+    After these steps, your dev environment should be good to go.  Run `python app.py` and look to see if your discord bot is online on any servers you've added it to.  Running commands in any text channel of a discord server of which the bot is a member should work.
 
-## Overview of functionality
+## Overview of Functionality
 
-The bot currently only supports playing music from youtube, given a url.  After using the `-play` command, the bot will download the audio as an mp3, storing it in the `music` directory, which it will create if it doesn't exist.  The bot will manage files it has already downloaded with `downloaded_songs.csv`, where it tracks the youtube id, title, and file path of all videos whose audio it's downloaded.  It just does this to avoid downloading any audio more than once.  
+The bot currently only supports playing music from youtube, given a url or a search query (string used in searching for a video on youtube).  The bot also supports queueing songs if another one is already playing, with more commands to display and modify the queue.
 
-### Working commands
+The bot stores all downloaded audio files in the `music` directory, which it will create if it doesn't exist already, and keeps track of metadata of the downloaded songs in `downloaded_songs.csv`.  It also keeps track of usage statistics, in `user_stats.json` and `song_stats.json`, with a command to display these stats.
+
+### Commands with examples
 
 The bot currently supports the following commands, using the prefix "-" in a text channel:  
+- `-help` -- displays a help menu with information on each command
 - `-join` -- joins the voice channel that the user is currently in, with an error message if the user is not in a channel
 -  `-leave` -- leaves the voice channel the bot is currently in, with an error message if the bot is not in a channel
--  `-play <insert youtube url>` -- will download and play the audio of this youtube video, or just play it if it has already downloaded the audio; if there is already a song playing, it will download it (if necessary) and it to the queue to be played later
+-  `-play <youtube url or search arguments>` -- will download and play the audio of this youtube video, or just play it if it has already downloaded the audio; if there is already a song playing, the bot will add it to the queue to be downloaded and played later
+   -  `-play https://youtu.be/dQw4w9WgXcQ`
+   -  `-play rick astley never gonna give you up`
 -  `-pause` -- will pause the current song, with an error message if nothing is playing
 -  `-resume` -- will resume the current song, with an error message if nothing is paused
 -  `-stop` -- will stop the current song, with an error message if nothing is playing; this is different from pausing because it cannot be resumed
+-  `-loop` -- will tell the bot to keep looping the queue until this command is used again
+-  `-clear` -- will clear the queue, not affecting the song currently playing
+-  `-skip` -- will skip the song currently playing and play the next one in the queue
+-  `-showqueue` -- will display whether or not the queue is looping, what the current song is, how many songs are in the queue, and the first 10 songs in the queue
+-  `-remove <position in queue to remove>` -- will remove the song at the given position in the queue (1 is first), with an error message for an invalid position; use the `showqueue` command to see the contents of the queue
+   -  `-remove 2`
+-  `-playall` -- will play (queue) all songs that are downloaded
+-  `stats` -- will display global usage statistics for bot, including information such as who has played the most songs and what song has been played the most
 
-### Known bugs and issues
-
-- It can take 30 seconds to a minute to download a song, which is a pretty annoying delay
-- Occasionally, when trying to download a song, the bot will give a 403 not authorized HTTP error, but will usually work when retrying
+### Known issues
 - When given a url to a playlist on youtube, the bot will just play the audio from the first video instead of queueing the entire playlist
-- When running `-pause`, `-resume`, or `-stop`, `app.py` throws an error that `ctx`, the parameter for each command that contains relevant discord information, is None, but the commands still work and I have no idea why
