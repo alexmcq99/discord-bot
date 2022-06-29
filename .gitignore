@@ -142,3 +142,7 @@ log.txt
 
 # Testing
 test.py
+
+# Statistics files
+song_stats.json
+user_stats.json
