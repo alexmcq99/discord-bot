@@ -138,7 +138,7 @@ def get_song(id, download=True):
     else: # Otherwise, retrieve it
         yt = YouTube(yt_id_to_url(id))
         title, duration = yt.title, yt.length
-        file_path = os.path.join(MUSIC_PATH, f"{title}.mp3")
+        file_path = None
         downloaded = False
 
     # Only download if we want to and haven't already downloaded it
@@ -147,6 +147,8 @@ def get_song(id, download=True):
             yt = YouTube(yt_id_to_url(id))
         stream = yt.streams.filter(only_audio=True).first()
         out_file = stream.download(output_path=MUSIC_PATH)
+        base, _ = os.path.splitext(out_file)
+        file_path = os.path.join(MUSIC_PATH, f"{base}.mp3")
         os.rename(out_file, file_path)
         downloaded = True
 
@@ -297,13 +299,15 @@ async def remove(ctx, position):
 @bot.command(name='skip', help='Skips the current song')
 async def skip(ctx):
     global curr_song_id
-    if ctx.voice_client.is_playing():
+    if not ctx.voice_client:
+        await ctx.send("The bot is not currently in a voice channel.")
+    elif not ctx.voice_client.is_playing():
+        await ctx.send("No song is currently playing.")
+    else:
         curr_song_title = downloaded_songs[curr_song_id][0]
         curr_song_id = None
         ctx.voice_client.stop()
         await ctx.send(f"Skipped :notes: {curr_song_title} :notes:")
-    else:
-        await ctx.send("No song is currently playing.")
 
 @bot.command(name='clear', help='Clears the song queue')
 async def clear(ctx):
@@ -312,28 +316,34 @@ async def clear(ctx):
 
 @bot.command(name='pause', help='Pauses the song')
 async def pause(ctx):
-    if ctx.voice_client.is_playing():
-        ctx.voice_client.pause()
-    else:
+    if not ctx.voice_client:
+        await ctx.send("The bot is not currently in a voice channel.")
+    elif not ctx.voice_client.is_playing():
         await ctx.send("No song is currently playing.")
+    else:
+        ctx.voice_client.pause()
     
 @bot.command(name='resume', aliases=['continue'], help='Resumes the song')
 async def resume(ctx):
-    if ctx.message.guild.voice_client.is_paused():
-        ctx.message.guild.voice_client.resume()
-    else:
+    if not ctx.voice_client:
+        await ctx.send("The bot is not currently in a voice channel.")
+    elif not ctx.voice_client.is_playing():
         await ctx.send("No song is currently playing.")
+    else:
+        ctx.voice_client.resume()
 
 @bot.command(name='stop', help='Stops the song and clears the queue')
 async def stop(ctx):
     global curr_song_id
-    if ctx.message.guild.voice_client.is_playing():
+    if not ctx.voice_client:
+        await ctx.send("The bot is not currently in a voice channel.")
+    elif not ctx.voice_client.is_playing():
+        await ctx.send("No song is currently playing.")
+    else:
         curr_song_id = None
         song_queue.clear()
         ctx.message.guild.voice_client.stop()
         await ctx.send("Stopped current song and cleared the song queue.")
-    else:
-        await ctx.send("No song is currently playing.")
 
 @bot.command(name='shuffle', help='Shuffles the queue randomly')
 async def shuffle(ctx):
@@ -352,11 +362,13 @@ def calculate_global_stats():
     mins = (total_duration % 3600) // 60
     seconds = (total_duration % 3600) % 60
     global_stats["Total duration of requested music"] = f"{str(hours).zfill(2)}:{str(mins).zfill(2)}:{str(seconds).zfill(2)}"
-    most_popular = max(song_stats, key= lambda song: song_stats[song])
-    global_stats["Most requested song"] = f"{downloaded_songs[most_popular][0]} with {song_stats[most_popular]} requests"
+    most_popular = downloaded_songs[max(song_stats, key= lambda song: song_stats[song])][0] if len(song_stats) > 0 else "N/A"
+    num_plays = song_stats[most_popular] if len(song_stats) > 0 else 0
+    global_stats["Most requested song"] = f"{most_popular} with {num_plays} requests"
     user_requests = {user: sum(user_stats[user].values()) for user in user_stats}
-    most_active = max(user_requests, key= lambda user: user_requests[user])
-    global_stats["Most active user"] = f"{most_active} with {user_requests[most_active]} requests"
+    most_active = max(user_requests, key= lambda user: user_requests[user]) if len(user_requests) > 0 else "N/A"
+    num_requests = user_requests[most_active] if len(user_requests) > 0 else 0
+    global_stats["Most active user"] = f"{most_active} with {num_requests} requests"
     return global_stats
 
 @bot.command(name='stats', help='Retrieves usage statistics for the bot and its users')
