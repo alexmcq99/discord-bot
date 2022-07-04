@@ -11,6 +11,9 @@ from discord.ext import commands
 import json
 from pytube import YouTube
 import random
+import spotipy
+from spotipy.oauth2 import SpotifyClientCredentials
+from unidecode import unidecode
 from urllib.parse import urlparse, parse_qs
 from urllib.request import urlopen
 
@@ -55,12 +58,14 @@ def write_stats(stats_file, stats):
     with open(stats_file, "w") as f:
         json.dump(stats, f)
 
-# get api token from .env
+# get api tokens from .env
 load_dotenv()
 DISCORD_TOKEN = os.getenv("discord_token")
+SPOTIPY_CLIENT_ID = os.getenv("spotipy_client_id")
+SPOTIPY_CLIENT_SECRET = os.getenv("spotipy_client_secret")
 
 # constants
-DURATION_LIMIT = 1200 # Any videos longer than this (in seconds) will not be downloaded
+DURATION_LIMIT = 1200 # Any videos longer than this (20 minutes in seconds) will not be downloaded
 MAX_SHOWN_SONGS = 10 # The maximum number of songs to show when displaying the song queue
 
 # paths
@@ -78,6 +83,10 @@ downloaded_songs = read_downloaded_songs(SONG_FILE)
 user_stats = read_stats(USER_STATS_FILE)
 song_stats = read_stats(SONG_STATS_FILE)
 
+# Spotify credentials and object
+creds = SpotifyClientCredentials(SPOTIPY_CLIENT_ID, SPOTIPY_CLIENT_SECRET)
+spotify = spotipy.Spotify(client_credentials_manager=creds)
+
 # make bot
 intents = discord.Intents().default()
 client = discord.Client(intents=intents)
@@ -88,11 +97,37 @@ song_queue = deque([])
 is_looping = False
 curr_song_id = None
 
+# Spotify
+
+def is_spotify_url(url):
+    query = urlparse(url)
+    return query.hostname == "open.spotify.com"
+
+# Return list of search queries for each song in an album or playlist
+# Returns a list with a single search query for a single song
+# Search queries are lists of words, so this method returns a list of lists of strings
+def get_spotify_info(url):
+    query = urlparse(url)
+    _, type, id = query.path.split("/")
+    search_list = []
+    if type == "album":
+        result = spotify.album(id)
+        search_list = [track['artists'][0]['name'].split() + "-" + track['name'].split() for track in result['tracks']['items']]
+    elif type == "track":
+        result = spotify.track(id)
+        search_list = [result['artists'][0]['name'].split() + "-" + result['name'].split()]
+    elif type == "playlist":
+        result = spotify.playlist_tracks(id, limit=50)
+        search_list = [item['track']['artists'][0]['name'].split() + ["-"] + item['track']['name'].split() for item in result['items']]
+    return search_list
+
+# YouTube
+
 # Returns youtube video id given a search query
 # Will return the first video in the search results
 # search_query is a list of words, like you would type when looking up a video
 def yt_search(search_query):
-    search_query = [s.encode('ascii', 'ignore').decode() for s in search_query]
+    search_query = [unidecode(s) for s in search_query]
     try:
         html = urlopen("https://www.youtube.com/results?search_query=" + "+".join(search_query))
     except Exception as e:
@@ -222,40 +257,51 @@ async def play(ctx, *args):
         await ctx.send("No arguments provided.  Please provide a url or search query.")
         return
     
-    # Determine if arguments are a youtube url or search query
+    search_queries = [] # List of search queries (lists of words) to look up songs on youtube
+    songs_to_add = [] # List of songs to add to queue
+
+    # Determine if arguments are a youtube url, spotify url, or search query
     url = args[0]
-    id = yt_url_to_id(url) # This id will be valid if given a url
-    if not id: # Invalid id means we have search arguments
-        search_result = yt_search(args)
+    yt_id = yt_url_to_id(url) # This yt id will be valid if given a url
+    if yt_id: # We have a youtube url
+        songs_to_add.append(yt_id)
+    elif is_spotify_url(url): # We have a spotify url
+        search_queries.extend(get_spotify_info(url))
+    else: # We have a search query
+        search_queries.append(args)
+    
+    # Do youtube search on search queries to get ids
+    for query in search_queries:
+        search_result = yt_search(query)
         if not search_result:
-            await ctx.send("\"" + " ".join(args) + "\" did not yield any search results.")
-            return
-        id = search_result
+            await ctx.send("\"" + " ".join(query) + "\" did not yield any search results.")
+        songs_to_add.append(search_result)
 
-    # Get song metadata without downloading
-    # We download just before playing the song to avoid downloading one song while playing another
-    title, _, duration, _ = get_song(id, download=False)
+    for song_id in songs_to_add:
+        # Get song metadata without downloading
+        # We download just before playing the song to avoid downloading one song while playing another
+        title, _, duration, _ = get_song(song_id, download=False)
 
-    if duration > DURATION_LIMIT: # Check if song is too long
-        duration_str = f"{str(DURATION_LIMIT // 60).zfill(2)}:{str(DURATION_LIMIT % 60).zfill(2)}"
-        await ctx.send(f":notes: {title} :notes: is too long to send.  Please request something shorter than {duration_str}.")
-        return
-    elif duration == 0: # Check if song is a livestream
-        await ctx.send(f":notes: {title} :notes: is currently streaming live and cannot be downloaded.")
-        return
+        if duration > DURATION_LIMIT: # Check if song is too long
+            duration_str = f"{str(DURATION_LIMIT // 60).zfill(2)}:{str(DURATION_LIMIT % 60).zfill(2)}"
+            await ctx.send(f":notes: {title} :notes: is too long to send.  Please request something shorter than {duration_str}.")
+            continue
+        elif duration == 0: # Check if song is a livestream
+            await ctx.send(f":notes: {title} :notes: is currently streaming live and cannot be downloaded.")
+            continue
 
-    # Update user stats
-    if ctx.author.mention not in user_stats:
-        user_stats[ctx.author.mention] = {}
-    user_stats[ctx.author.mention][id] = user_stats[ctx.author.mention].get(id, 0) + 1
+        # Update user stats
+        if ctx.author.mention not in user_stats:
+            user_stats[ctx.author.mention] = {}
+        user_stats[ctx.author.mention][song_id] = user_stats[ctx.author.mention].get(song_id, 0) + 1
 
-    # Update song stats
-    song_stats[id] = song_stats.get(id, 0) + 1
+        # Update song stats
+        song_stats[song_id] = song_stats.get(song_id, 0) + 1
 
-    # Add to queue and play the next song
-    song_queue.append(id)
-    await ctx.send(f"Successfully added :notes: {title} :notes: to the queue.")
-    play_next(ctx)
+        # Add to queue and play the next song
+        song_queue.append(song_id)
+        await ctx.send(f"Successfully added :notes: {title} :notes: to the queue.")
+        play_next(ctx)
 
 @bot.command(name='playall', help='Plays all downloaded songs')
 async def playall(ctx):
@@ -356,14 +402,22 @@ async def shuffle(ctx):
 # Calculates global statistics based off of the stats dictionaries
 def calculate_global_stats():
     global_stats = {}
+
+    # Total requests
     global_stats["Total requests"] = sum(song_stats.values())
+
+    # Total duration
     total_duration = sum([downloaded_songs[id][2] * song_stats[id] for id in song_stats])
     hours = total_duration // 3600
     mins = (total_duration % 3600) // 60
     seconds = (total_duration % 3600) % 60
     global_stats["Total duration of requested music"] = f"{str(hours).zfill(2)}:{str(mins).zfill(2)}:{str(seconds).zfill(2)}"
-    most_popular = downloaded_songs[max(song_stats, key= lambda song: song_stats[song])][0] if len(song_stats) > 0 else "N/A"
-    num_plays = song_stats[most_popular] if len(song_stats) > 0 else 0
+
+    # Most requested song
+    if 
+    most_popular_id = max(song_stats, key= lambda song: song_stats[song])
+    most_popular_title = downloaded_songs[most_popular_id][0] if len(song_stats) > 0 else "N/A"
+    num_plays = song_stats[most_popular_id] if len(song_stats) > 0 else 0
     global_stats["Most requested song"] = f"{most_popular} with {num_plays} requests"
     user_requests = {user: sum(user_stats[user].values()) for user in user_stats}
     most_active = max(user_requests, key= lambda user: user_requests[user]) if len(user_requests) > 0 else "N/A"
