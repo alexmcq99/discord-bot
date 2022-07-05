@@ -1,10 +1,8 @@
 import asyncio
 import atexit
-import csv
 import discord
 from dotenv import load_dotenv
 import os
-import re
 from collections import deque
 from contextlib import suppress
 from discord.ext import commands
@@ -15,7 +13,6 @@ import spotipy
 from spotipy.oauth2 import SpotifyClientCredentials
 from unidecode import unidecode
 from urllib.parse import urlparse, parse_qs
-from urllib.request import urlopen
 
 # Read a json file to a dictionary
 # Return an empty dictionary if not found
@@ -45,7 +42,7 @@ SPOTIPY_CLIENT_SECRET = os.getenv("spotipy_client_secret")
 # Constants
 DURATION_LIMIT = 1200 # Any videos longer than this (20 minutes in seconds) will not be downloaded
 MAX_SHOWN_SONGS = 10 # The maximum number of songs to show when displaying the song queue
-SPOTIFY_SONG_LIMIT = 50 # The maximum number of songs to add from a spotify playlist
+SPOTIFY_SONG_LIMIT = 100 # The maximum number of songs to add from a spotify playlist
 
 # Paths
 MUSIC_PATH = "music" # Directory where music files are stored
@@ -80,42 +77,24 @@ def is_spotify_url(url):
     query = urlparse(url)
     return query.hostname == "open.spotify.com"
 
-# Return list of search queries for each song in an album or playlist
-# Returns a list with a single search query for a single song
-# Search queries are lists of words, so this method returns a list of lists of strings
+# Return list of search queries (strings to search) for each song in an album or playlist
+# If given a link to a track, returns a list with a single element
 def get_spotify_info(url):
     query = urlparse(url)
     _, type, id = query.path.split("/")
     search_list = []
     if type == "album":
         result = spotify.album(id)
-        search_list = [track['artists'][0]['name'].split() + "-" + track['name'].split() for track in result['tracks']['items']]
+        search_list = [f"{track['artists'][0]['name']} - {track['name']}" for track in result['tracks']['items']]
     elif type == "track":
         result = spotify.track(id)
-        search_list = [result['artists'][0]['name'].split() + "-" + result['name'].split()]
+        search_list = [f"{result['artists'][0]['name']} - {result['name']}"]
     elif type == "playlist":
         result = spotify.playlist_tracks(id, limit=SPOTIFY_SONG_LIMIT)
-        search_list = [item['track']['artists'][0]['name'].split() + ["-"] + item['track']['name'].split() for item in result['items']]
+        search_list = [f"{item['track']['artists'][0]['name']} - {item['track']['name']}" for item in result['items']]
     return search_list
 
 # YouTube
-
-# Returns youtube video id given a search query
-# Will return the first video in the search results
-# search_query is a list of words, like you would type when looking up a video
-def yt_search(search_query):
-    search_query = [unidecode(s) for s in search_query]
-    try:
-        html = urlopen("https://www.youtube.com/results?search_query=" + "+".join(search_query))
-    except Exception as e:
-        print(f"Error: {str(e)}")
-        return None
-    video_ids = re.findall(r"watch\?v=(\S{11})", html.read().decode())
-    if len(video_ids) == 0:
-        print(html.read().decode())
-        return None
-    id = video_ids[0]
-    return id
 
 # Returns youtube video url given its id
 def yt_id_to_url(id):
@@ -140,37 +119,6 @@ def yt_url_to_id(url, ignore_playlist=True):
         if query.path[:7] == '/embed/': return query.path.split('/')[2]
         if query.path[:3] == '/v/': return query.path.split('/')[2]
    # returns None for invalid YouTube url
-
-# Retrieves song metadata and stores it in the song_datas dictionary
-# Will optionally download the song file itself (since it's costly)
-def get_song(id, download=True):
-    yt = None
-    if id in song_data: # Get metadata if we already have it
-        data = song_data[id]
-    else: # Otherwise, retrieve it
-        yt = YouTube(yt_id_to_url(id))
-        data = {
-            "title": yt.title,
-            "duration": yt.length,
-            "downloaded": False,
-            "file path": None,
-            "request count": 0
-        }
-
-    # Only download if we want to and haven't already downloaded it
-    if download and not data["downloaded"]:
-        if not yt:
-            yt = YouTube(yt_id_to_url(id))
-        stream = yt.streams.filter(only_audio=True).first()
-        out_file = stream.download(output_path=MUSIC_PATH)
-        base, _ = os.path.splitext(out_file)
-        file_path = os.path.join(MUSIC_PATH, f"{base}.mp3")
-        os.rename(out_file, file_path)
-
-        data["file path"], data["downloaded"] = file_path, True
-    
-    song_data[id] = data
-    return data
 
 # Bot commands
 
@@ -205,6 +153,50 @@ async def leave(ctx):
     else:
         await ctx.send("The bot is not currently in a voice channel.")
 
+# Retrieves song metadata and stores it in the song_data dictionary
+# Will optionally download the song file itself (since it's costly)
+# Can take in an id or search query for parameter song_info, according to is_id
+# Returns None if a search returns no results
+def get_song(song_info, is_id=False, download=True):
+    yt = None
+    if not is_id: # Do youtube search to get id
+        s = Search(unidecode(song_info))
+        if len(s.results) == 0: # No results for search
+            return None
+        
+        yt = s.results[0]
+        id = yt.video_id
+    else:
+        id = song_info
+
+    if id in song_data: # Get metadata if we already have it
+        data = song_data[id]
+    else: # Otherwise, retrieve it
+        if not yt:
+            yt = YouTube(yt_id_to_url(id))
+        data = {
+            "title": yt.title,
+            "duration": yt.length,
+            "downloaded": False,
+            "file path": None,
+            "request count": 0
+        }
+
+    # Only download if we want to and haven't already downloaded it
+    if download and not data["downloaded"]:
+        if not yt:
+            yt = YouTube(yt_id_to_url(id))
+        stream = yt.streams.filter(only_audio=True).first()
+        out_file = stream.download(output_path=MUSIC_PATH)
+        base, _ = os.path.splitext(out_file)
+        file_path = os.path.join(MUSIC_PATH, f"{base}.mp3")
+        os.rename(out_file, file_path)
+
+        data["file path"], data["downloaded"] = file_path, True
+    
+    song_data[id] = data
+    return id
+
 # Recursive callback to play the next song
 # Used by the "-play" command
 # This is the function that actually downloads and plays the next song in the queue
@@ -217,7 +209,8 @@ def play_next(ctx):
     # If current song is finished and there's something queued, play it
     if len(song_queue) >= 1 and not ctx.voice_client.is_playing():
         curr_song_id = song_queue.popleft()
-        data = get_song(curr_song_id) # Downloads the song if not already downloaded
+        get_song(curr_song_id, is_id=True) # Downloads the song if not already downloaded
+        data = song_data[curr_song_id]
         title, file_path = data["title"], data["file path"]
         asyncio.run_coroutine_threadsafe(ctx.send(f'**Now playing:** :notes: {title} :notes:'), loop=bot.loop)
         ctx.message.guild.voice_client.play(discord.FFmpegPCMAudio(executable="ffmpeg.exe", source=file_path), after=lambda e: play_next(ctx))
@@ -236,33 +229,31 @@ async def play(ctx, *args):
         await ctx.send("No arguments provided.  Please provide a url or search query.")
         return
     
-    search_queries = [] # List of search queries (lists of words) to look up songs on youtube
-    songs_to_add = [] # List of songs to add to queue
+    songs_to_add = [] # List of songs to add to queue -- can be a youtube id or a search query
+    using_id = False # Flag to check if we're working with youtube id or search queries
 
     # Determine if arguments are a youtube url, spotify url, or search query
     url = args[0]
     yt_id = yt_url_to_id(url) # This yt id will be valid if given a url
     if yt_id: # We have a youtube url
         songs_to_add.append(yt_id)
+        using_id = True
     elif is_spotify_url(url): # We have a spotify url
         print("getting spotify data")
-        search_queries.extend(get_spotify_info(url))
+        songs_to_add.extend(get_spotify_info(url))
     else: # We have a search query
-        search_queries.append(args)
-    
-    print("doing youtube searches")
-    # Do youtube search on search queries to get ids
-    for query in search_queries:
-        search_result = yt_search(query)
-        if not search_result:
-            await ctx.send("\"" + " ".join(query) + "\" did not yield any search results.")
-        songs_to_add.append(search_result)
+        songs_to_add.append(" ".join(args))
 
     print("getting song metadata and adding to queue")
-    for song_id in songs_to_add:
+    for song_info in songs_to_add:
         # Get song metadata without downloading
         # We download just before playing the song to avoid downloading one song while playing another
-        data = get_song(song_id, download=False)
+        id = get_song(song_info, is_id=using_id, download=False)
+        if not id:
+            await ctx.send(f"\"{song_info}\" did not yield any search results.")
+            continue
+
+        data = song_data[id]
         title, duration = data["title"], data["duration"]
 
         if duration > DURATION_LIMIT: # Check if song is too long
@@ -276,13 +267,13 @@ async def play(ctx, *args):
         # Update user usage data
         if ctx.author.mention not in user_data:
             user_data[ctx.author.mention] = {}
-        user_data[ctx.author.mention][song_id] = user_data[ctx.author.mention].get(song_id, 0) + 1
+        user_data[ctx.author.mention][id] = user_data[ctx.author.mention].get(id, 0) + 1
 
         # Update request count for song
-        song_data[song_id]["request count"] += 1
+        song_data[id]["request count"] += 1
 
         # Add to queue and play the next song
-        song_queue.append(song_id)
+        song_queue.append(id)
         await ctx.send(f"Successfully added :notes: {title} :notes: to the queue.")
         play_next(ctx)
 
