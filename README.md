@@ -45,7 +45,9 @@ The bot currently supports the following commands, using the prefix "-" in a tex
 -  `-remove <position in queue to remove>` -- will remove the song at the given position in the queue (1 is first), with an error message for an invalid position; use the `showqueue` command to see the contents of the queue
    -  `-remove 2`
 -  `-playall` -- will play (queue) all songs that are downloaded
--  `stats` -- will display global usage statistics for bot, including information such as who has played the most songs and what song has been played the most
+-  `stats` -- will display global usage statistics for bot, including information such as who has played the most songs and what song has been played the most; takes in a single optional argument for a user to get their usage statistics
+   -  `-state`
+   -  `-stats @Alex`
 
 ### Known issues
 - When given a url to a playlist on youtube, the bot will just play the audio from the first video instead of queueing the entire playlist
