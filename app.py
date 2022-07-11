@@ -55,6 +55,7 @@ if not os.path.exists(MUSIC_PATH):
 
 # Read files into dictionaries
 song_data = read_json_file(SONG_FILE)
+# print(song_data)
 user_data = read_json_file(USER_FILE)
 
 # Spotify credentials and object
@@ -190,6 +191,7 @@ def get_song(song_info, is_id=False, download=True):
         out_file = stream.download(output_path=MUSIC_PATH)
         base, _ = os.path.splitext(out_file)
         file_path = os.path.join(MUSIC_PATH, f"{base}.mp3")
+        # print(song_data)
         os.rename(out_file, file_path)
 
         data["file path"], data["downloaded"] = file_path, True
