@@ -48,6 +48,7 @@ The bot currently supports the following commands, using the prefix "-" in a tex
 -  `stats <user>` -- will display global usage statistics for bot, including information such as who has played the most songs and what song has been played the most; takes in a single optional argument for a user to get their usage statistics
    -  `-stats`
    -  `-stats @Alex`
+-  `-shuffle` -- shuffles the queue
 
 ### Known issues
 - When given a url to a playlist on youtube, the bot will just play the audio from the first video instead of queueing the entire playlist
