@@ -206,10 +206,10 @@ def get_song(song_info, is_id=False, download=True):
 def play_next(ctx):
     global curr_song_id, is_looping
     # If looping, take current song that just finished and add it back to the queue
-    if is_looping and curr_song_id and not ctx.voice_client.is_playing():
+    if is_looping and curr_song_id and not ctx.voice_client.is_playing() and not ctx.voice_client.is_paused():
         song_queue.append(curr_song_id)
     # If current song is finished and there's something queued, play it
-    if len(song_queue) >= 1 and not ctx.voice_client.is_playing():
+    if len(song_queue) >= 1 and not ctx.voice_client.is_playing() and not ctx.voice_client.is_paused():
         curr_song_id = song_queue.popleft()
         get_song(curr_song_id, is_id=True) # Downloads the song if not already downloaded
         data = song_data[curr_song_id]
@@ -349,7 +349,7 @@ async def pause(ctx):
 async def resume(ctx):
     if not ctx.voice_client:
         await ctx.send("The bot is not currently in a voice channel.")
-    elif not ctx.voice_client.is_playing():
+    elif not ctx.voice_client.is_paused():
         await ctx.send("No song is currently playing.")
     else:
         ctx.voice_client.resume()
