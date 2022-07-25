@@ -32,9 +32,10 @@ The bot currently supports the following commands, using the prefix "-" in a tex
 - `-help` -- displays a help menu with information on each command
 - `-join` -- joins the voice channel that the user is currently in, with an error message if the user is not in a channel
 -  `-leave` -- leaves the voice channel the bot is currently in, with an error message if the bot is not in a channel
--  `-play <youtube url or search arguments>` -- will download and play the audio of this youtube video, or just play it if it has already downloaded the audio; if there is already a song playing, the bot will add it to the queue to be downloaded and played later
+-  `-play <youtube url, search arguments, or spotify album, playlist, or track url>` -- will download and play the audio of this youtube video, or just play it if it has already downloaded the audio; if a spotify url, it will download and play all songs in the album or playlist; if there is already a song playing, the bot will add it to the queue to be downloaded and played later
    -  `-play https://youtu.be/dQw4w9WgXcQ`
    -  `-play rick astley never gonna give you up`
+   -  -play https://open.spotify.com/playlist/6FkEOJ76LyyajBjOoGvGXT?si=ac9e408b47ce470d
 -  `-pause` -- will pause the current song, with an error message if nothing is playing
 -  `-resume` -- will resume the current song, with an error message if nothing is paused
 -  `-stop` -- will stop the current song, with an error message if nothing is playing; this is different from pausing because it cannot be resumed
@@ -45,9 +46,10 @@ The bot currently supports the following commands, using the prefix "-" in a tex
 -  `-remove <position in queue to remove>` -- will remove the song at the given position in the queue (1 is first), with an error message for an invalid position; use the `showqueue` command to see the contents of the queue
    -  `-remove 2`
 -  `-playall` -- will play (queue) all songs that are downloaded
--  `stats <user>` -- will display global usage statistics for bot, including information such as who has played the most songs and what song has been played the most; takes in a single optional argument for a user to get their usage statistics
-   -  `-stats`
-   -  `-stats @Alex`
+-  `stats <user>` -- will display global usage statistics for bot, including information such as who has played the most songs and what song has been played the most; takes in arguments for a specific user or song
+   -  `-stats` -- gets global statistics
+   -  `-stats @Alex` -- gets statistics for user "@Alex"
+   -  `-stats toto africa` -- gets statistics for Africa by Toto, if applicable
 -  `-shuffle` -- shuffles the queue
 
 ### Known issues
