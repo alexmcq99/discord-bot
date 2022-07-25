@@ -1,5 +1,6 @@
 import asyncio
 import atexit
+from time import time
 import discord
 from dotenv import load_dotenv
 import os
@@ -121,6 +122,14 @@ def yt_url_to_id(url, ignore_playlist=True):
         if query.path[:3] == '/v/': return query.path.split('/')[2]
    # returns None for invalid YouTube url
 
+
+# Format time string given duration in seconds
+def time_string(duration):
+    hours = duration // 3600
+    mins = (duration % 3600) // 60
+    seconds = (duration % 3600) % 60
+    return f"{str(hours).zfill(2)}:{str(mins).zfill(2)}:{str(seconds).zfill(2)}"
+
 # Bot commands
 
 # Returns a boolean detailing its success joining a channel
@@ -180,7 +189,8 @@ def get_song(song_info, is_id=False, download=True):
             "duration": yt.length,
             "downloaded": False,
             "file path": None,
-            "request count": 0
+            "request count": 0,
+            "times played": 0
         }
 
     # Only download if we want to and haven't already downloaded it
@@ -208,6 +218,7 @@ def play_next(ctx):
     # If looping, take current song that just finished and add it back to the queue
     if is_looping and curr_song_id and not ctx.voice_client.is_playing() and not ctx.voice_client.is_paused():
         song_queue.append(curr_song_id)
+
     # If current song is finished and there's something queued, play it
     if len(song_queue) >= 1 and not ctx.voice_client.is_playing() and not ctx.voice_client.is_paused():
         curr_song_id = song_queue.popleft()
@@ -216,6 +227,10 @@ def play_next(ctx):
         title, file_path = data["title"], data["file path"]
         asyncio.run_coroutine_threadsafe(ctx.send(f'**Now playing:** :notes: {title} :notes:'), loop=bot.loop)
         ctx.message.guild.voice_client.play(discord.FFmpegPCMAudio(executable="ffmpeg.exe", source=file_path), after=lambda e: play_next(ctx))
+
+        # Increase play count
+        song_data[curr_song_id]["times played"] += 1
+
     # No current song
     elif len(song_queue) == 0:
         curr_song_id = None
@@ -259,17 +274,17 @@ async def play(ctx, *args):
         title, duration = data["title"], data["duration"]
 
         if duration > DURATION_LIMIT: # Check if song is too long
-            duration_str = f"{str(DURATION_LIMIT // 60).zfill(2)}:{str(DURATION_LIMIT % 60).zfill(2)}"
-            await ctx.send(f":notes: {title} :notes: is too long to send.  Please request something shorter than {duration_str}.")
+            await ctx.send(f":notes: {title} :notes: is too long to send.  Please request something shorter than {time_string(DURATION_LIMIT)}.")
             continue
         elif duration == 0: # Check if song is a livestream
             await ctx.send(f":notes: {title} :notes: is currently streaming live and cannot be downloaded.")
             continue
 
         # Update user usage data
-        if ctx.author.mention not in user_data:
-            user_data[ctx.author.mention] = {}
-        user_data[ctx.author.mention][id] = user_data[ctx.author.mention].get(id, 0) + 1
+        user = ctx.author.mention.replace("!", "")
+        if user not in user_data:
+            user_data[user] = {}
+        user_data[user][id] = user_data[user].get(id, 0) + 1
 
         # Update request count for song
         song_data[id]["request count"] += 1
@@ -384,11 +399,8 @@ def calculate_global_stats():
     global_stats["Total requests"] = sum([data["request count"] for data in song_data.values()])
 
     # Total duration
-    total_duration = sum([data["request count"] * data["duration"] for data in song_data.values()])
-    hours = total_duration // 3600
-    mins = (total_duration % 3600) // 60
-    seconds = (total_duration % 3600) % 60
-    global_stats["Total duration of requested music"] = f"{str(hours).zfill(2)}:{str(mins).zfill(2)}:{str(seconds).zfill(2)}"
+    total_duration = sum([data["times played"] * data["duration"] for data in song_data.values()])
+    global_stats["Total duration of played music"] = time_string(total_duration)
 
     # Most requested song
     if len(song_data) > 0:
@@ -399,6 +411,16 @@ def calculate_global_stats():
     else:
         msg = "N/A"
     global_stats["Most requested song"] = msg
+
+    # Most played song
+    if len(song_data) > 0:
+        most_popular_id = max(song_data, key= lambda id: song_data[id]["times played"])
+        most_popular_title = song_data[most_popular_id]["title"]
+        request_count = song_data[most_popular_id]["times played"]
+        msg = f"{most_popular_title} with {request_count} plays"
+    else:
+        msg = "N/A"
+    global_stats["Most played song"] = msg
 
     # Most active user
     user_requests = {user: sum(user_data[user].values()) for user in user_data}
@@ -422,10 +444,7 @@ def calculate_user_stats(user):
 
     # Total duration
     total_duration = sum([data[id] * song_data[id]["duration"] for id in data])
-    hours = total_duration // 3600
-    mins = (total_duration % 3600) // 60
-    seconds = (total_duration % 3600) % 60
-    user_stats["Total duration of requested music"] = f"{str(hours).zfill(2)}:{str(mins).zfill(2)}:{str(seconds).zfill(2)}"
+    user_stats["Total duration of requested music"] = time_string(total_duration)
 
     # Most requested song
     if len(data) > 0:
@@ -439,6 +458,32 @@ def calculate_user_stats(user):
 
     return user_stats
 
+def calculate_song_stats(song_info):
+    s = Search(unidecode(song_info))
+    if len(s.results) == 0: # No results for search
+        return None
+    yt = s.results[0]
+    id = yt.video_id
+    if id not in song_data:
+        return None
+
+    data = song_data[id]
+    song_stats = {}
+
+    # Title
+    song_stats["Title"] = data["title"]
+
+    # Duration
+    song_stats["Duration"] = time_string(data["duration"])
+
+    # Request Count
+    song_stats["Request count"] = data["request count"]
+
+    # Times played
+    song_stats["Times played"] = data["times played"]
+
+    return song_stats
+
 @bot.command(name='stats', help='Retrieves usage statistics for the bot and its users.  Will print global statistics if given no arguments or will give user arguments if a user is mentioned as an argument.')
 async def stats(ctx, *args):
     if len(args) == 0:
@@ -446,12 +491,16 @@ async def stats(ctx, *args):
         msg = "Global statistics:\n" + "\n".join([f"{name}: {value}" for name, value in global_stats.items()])
     else:
         user = args[0]
-        user = user[:2] + "!" + user[2:]
-        if user in user_data:
+        if len(args) == 0 or user in user_data: # Check if valid user
             user_stats = calculate_user_stats(user)
             msg = f"Statistics for user {user}:\n" + "\n".join([f"{name}: {value}" for name, value in user_stats.items()])
-        else:
-            msg = f"User {user} not found."
+        else: # Search for song
+            song_info = " ".join(args)
+            song_stats = calculate_song_stats(song_info)
+            if song_stats:
+                msg = f"Statistics for queried song:\n" + "\n".join([f"{name}: {value}" for name, value in song_stats.items()])
+            else:
+                msg = "User or song not found."
     await ctx.send(msg)
 
 if __name__ == "__main__":
