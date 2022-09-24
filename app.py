@@ -1,7 +1,6 @@
 import argparse
 import asyncio
 import atexit
-from time import time
 import discord
 from dotenv import load_dotenv
 import os
@@ -56,7 +55,7 @@ SPOTIFY_SONG_LIMIT = 100 # The maximum number of songs to add from a spotify pla
 MUSIC_PATH = "music" # Directory where music files are stored
 SONG_FILE = "song_data.json" # File with metadata on downloaded songs
 USER_FILE = "user_data.json" # File with usage data grouped by user
-FFMPEG_PATH = os.path.join(os.getcwd(), "ffmpeg.exe") # Get absolute file path of ffmpeg.exe, which should already be downloaded
+FFMPEG_PATH = "ffmpeg"
 
 # Reset downloaded files and metadata if applicable
 if (args.reset):
@@ -70,7 +69,6 @@ if not os.path.exists(MUSIC_PATH):
 
 # Read files into dictionaries
 song_data = read_json_file(SONG_FILE)
-# print(song_data)
 user_data = read_json_file(USER_FILE)
 
 # Spotify credentials and object
@@ -243,7 +241,7 @@ def play_next(ctx):
         data = song_data[curr_song_id]
         title, file_path = data["title"], data["file path"]
         asyncio.run_coroutine_threadsafe(ctx.send(f'**Now playing:** :notes: {title} :notes:'), loop=bot.loop)
-        ctx.message.guild.voice_client.play(discord.FFmpegPCMAudio(executable="ffmpeg", source=file_path), after=lambda e: play_next(ctx))
+        ctx.message.guild.voice_client.play(discord.FFmpegPCMAudio(executable=FFMPEG_PATH, source=file_path), after=lambda e: play_next(ctx))
 
         # Increase play count
         song_data[curr_song_id]["times played"] += 1
@@ -525,8 +523,5 @@ if __name__ == "__main__":
     atexit.register(lambda *args: write_json_file(USER_FILE, user_data))
     atexit.register(lambda *args: write_json_file(SONG_FILE, song_data))
 
-    print("Running bot, current directory is ", os.getcwd())
-    print("Files in current directory: ", os.listdir("."))
-    print("Is ffmpeg.exe here: ", os.path.exists("ffmpeg.exe"))
     # Run the bot
     bot.run(DISCORD_TOKEN)
