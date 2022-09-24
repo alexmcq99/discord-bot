@@ -524,5 +524,8 @@ if __name__ == "__main__":
     atexit.register(lambda *args: write_json_file(USER_FILE, user_data))
     atexit.register(lambda *args: write_json_file(SONG_FILE, song_data))
 
+    print("Running bot, current directory is ", os.getcwd())
+    print("Files in current directory: ", os.listdir("."))
+    print("Is ffmpeg.exe here: ", os.path.exists("ffmpeg.exe"))
     # Run the bot
     bot.run(DISCORD_TOKEN)
