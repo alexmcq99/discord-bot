@@ -243,7 +243,7 @@ def play_next(ctx):
         data = song_data[curr_song_id]
         title, file_path = data["title"], data["file path"]
         asyncio.run_coroutine_threadsafe(ctx.send(f'**Now playing:** :notes: {title} :notes:'), loop=bot.loop)
-        ctx.message.guild.voice_client.play(discord.FFmpegPCMAudio(executable=FFMPEG_PATH, source=file_path), after=lambda e: play_next(ctx))
+        ctx.message.guild.voice_client.play(discord.FFmpegPCMAudio(executable="ffmpeg", source=file_path), after=lambda e: play_next(ctx))
 
         # Increase play count
         song_data[curr_song_id]["times played"] += 1
