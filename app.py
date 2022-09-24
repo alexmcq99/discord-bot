@@ -56,6 +56,7 @@ SPOTIFY_SONG_LIMIT = 100 # The maximum number of songs to add from a spotify pla
 MUSIC_PATH = "music" # Directory where music files are stored
 SONG_FILE = "song_data.json" # File with metadata on downloaded songs
 USER_FILE = "user_data.json" # File with usage data grouped by user
+FFMPEG_PATH = os.path.join(os.getcwd(), "ffmpeg.exe") # Get absolute file path of ffmpeg.exe, which should already be downloaded
 
 # Reset downloaded files and metadata if applicable
 if (args.reset):
@@ -242,7 +243,7 @@ def play_next(ctx):
         data = song_data[curr_song_id]
         title, file_path = data["title"], data["file path"]
         asyncio.run_coroutine_threadsafe(ctx.send(f'**Now playing:** :notes: {title} :notes:'), loop=bot.loop)
-        ctx.message.guild.voice_client.play(discord.FFmpegPCMAudio(executable="ffmpeg.exe", source=file_path), after=lambda e: play_next(ctx))
+        ctx.message.guild.voice_client.play(discord.FFmpegPCMAudio(executable=FFMPEG_PATH, source=file_path), after=lambda e: play_next(ctx))
 
         # Increase play count
         song_data[curr_song_id]["times played"] += 1
