@@ -1,3 +1,4 @@
+import argparse
 import asyncio
 import atexit
 from time import time
@@ -10,6 +11,7 @@ from discord.ext import commands
 import json
 from pytube import Search, YouTube
 import random
+import shutil
 import spotipy
 from spotipy.oauth2 import SpotifyClientCredentials
 from unidecode import unidecode
@@ -34,6 +36,11 @@ def write_json_file(file, data):
     with open(file, "w") as f:
         json.dump(data, f, indent=4)
 
+# Set up argument parser
+parser = argparse.ArgumentParser(description="Set up music bot")
+parser.add_argument("--reset", action="store_true", help="Delete music and metadata before starting the bot")
+args = parser.parse_args()
+
 # Get api tokens from .env
 load_dotenv()
 DISCORD_TOKEN = os.getenv("discord_token")
@@ -41,14 +48,20 @@ SPOTIPY_CLIENT_ID = os.getenv("spotipy_client_id")
 SPOTIPY_CLIENT_SECRET = os.getenv("spotipy_client_secret")
 
 # Constants
-DURATION_LIMIT = 1200 # Any videos longer than this (20 minutes in seconds) will not be downloaded
-MAX_SHOWN_SONGS = 10 # The maximum number of songs to show when displaying the song queue
+DURATION_LIMIT = 1800 # Any videos longer than this (30 minutes in seconds) will not be downloaded
+MAX_SHOWN_SONGS = 20 # The maximum number of songs to show when displaying the song queue
 SPOTIFY_SONG_LIMIT = 100 # The maximum number of songs to add from a spotify playlist
 
 # Paths
 MUSIC_PATH = "music" # Directory where music files are stored
 SONG_FILE = "song_data.json" # File with metadata on downloaded songs
 USER_FILE = "user_data.json" # File with usage data grouped by user
+
+# Reset downloaded files and metadata if applicable
+if (args.reset):
+    shutil.rmtree(MUSIC_PATH)
+    os.remove(SONG_FILE)
+    os.remove(USER_FILE)
 
 # Create directory if it doesn't exist
 if not os.path.exists(MUSIC_PATH):
@@ -201,8 +214,11 @@ def get_song(song_info, is_id=False, download=True):
         out_file = stream.download(output_path=MUSIC_PATH)
         base, _ = os.path.splitext(out_file)
         file_path = os.path.join(MUSIC_PATH, f"{base}.mp3")
-        # print(song_data)
-        os.rename(out_file, file_path)
+        
+        if not os.path.exists(file_path):
+            os.rename(out_file, file_path)
+        else:
+            print("Attempted to download something that has already been downloaded.\n", data)
 
         data["file path"], data["downloaded"] = file_path, True
     
@@ -333,7 +349,7 @@ async def remove(ctx, position):
     else:
         await ctx.send(f"Invalid position.  Please choose a position between 1 and {len(song_queue)}, inclusive.  Use the command \"-showqueue\" to show the current queue.")
 
-@bot.command(name='skip', help='Skips the current song')
+@bot.command(name='skip', aliases=['next'], help='Skips the current song')
 async def skip(ctx):
     global curr_song_id
     if not ctx.voice_client:
@@ -369,7 +385,7 @@ async def resume(ctx):
     else:
         ctx.voice_client.resume()
 
-@bot.command(name='stop', help='Stops the song and clears the queue')
+@bot.command(name='stop', aliases=['cancel'], help='Stops the song and clears the queue')
 async def stop(ctx):
     global curr_song_id, is_looping
     if not ctx.voice_client:
