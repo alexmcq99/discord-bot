@@ -59,9 +59,12 @@ FFMPEG_PATH = "ffmpeg"
 
 # Reset downloaded files and metadata if applicable
 if (args.reset):
-    shutil.rmtree(MUSIC_PATH)
-    os.remove(SONG_FILE)
-    os.remove(USER_FILE)
+    if os.path.exists(MUSIC_PATH):
+        shutil.rmtree(MUSIC_PATH)
+    if os.path.exists(SONG_FILE):
+        os.remove(SONG_FILE)
+    if os.path.exists(USER_FILE):
+        os.remove(USER_FILE)
 
 # Create directory if it doesn't exist
 if not os.path.exists(MUSIC_PATH):
