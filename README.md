@@ -57,3 +57,6 @@ The bot currently supports the following commands, using the prefix "-" in a tex
 
 ### Known issues
 - When given a url to a playlist on youtube, the bot will just play the audio from the first video instead of queueing the entire playlist
+
+### Future work
+- Add sharding to make the bot scalable if it ever becomes publicly available
