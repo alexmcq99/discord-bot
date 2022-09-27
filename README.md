@@ -63,3 +63,4 @@ The bot currently supports the following commands, using the prefix "-" in a tex
 - Add sharding to make the bot scalable if it ever becomes publicly available
 - Add scripts for linux and windows to automate setting up developer environment
 - Set up automaticic docker deployment on Azure
+- Set up pipeline for code changes
