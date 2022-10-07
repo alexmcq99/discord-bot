@@ -1,0 +1,25 @@
+name: Docker Image CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+
+  build:
+
+    runs-on: ubuntu-latest
+    environment: docker-credentials-env
+    steps:
+    - uses: actions/checkout@v3
+    - name: Build and push latest image to ACR
+      env:
+        ACR_USERNAME: ${{ secrets.ACR_USERNAME }}
+        ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
+        ACR: ${{ secrets.ACR }}
+      run: |
+        docker login -u $ACR_USERNAME -p $ACR_PASSWORD $ACR
+        docker build -t ${ACR}/discord-music-bot:latest .
+        docker push ${ACR}/discord-music-bot:latest
