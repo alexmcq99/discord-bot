@@ -23,3 +23,13 @@ jobs:
         docker login -u $ACR_USERNAME -p $ACR_PASSWORD $ACR
         docker build -t ${ACR}/discord-music-bot:latest .
         docker push ${ACR}/discord-music-bot:latest
+  
+  restart:
+    runs-on: ubuntu-latest
+    environment: az-credentials-env
+    steps:
+    - uses: actions/login@v1
+      with: 
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+    - run: |
+        az container stop -n discord-music-bot-instance -g discord-music-bot-rg
