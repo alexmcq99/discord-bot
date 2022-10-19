@@ -32,4 +32,4 @@ jobs:
       with: 
         creds: ${{ secrets.AZURE_CREDENTIALS }}
     - run: |
-        az container stop -n discord-music-bot-instance -g discord-music-bot-rg
+        az container restart -n discord-music-bot-instance -g discord-music-bot-rg
