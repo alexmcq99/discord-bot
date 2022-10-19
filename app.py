@@ -8,6 +8,7 @@ from collections import deque
 from contextlib import suppress
 from discord.ext import commands
 import json
+import logging
 from pytube import Search, YouTube
 import random
 import shutil
@@ -25,7 +26,7 @@ def read_json_file(file):
     except FileNotFoundError as e:
         data = {}
     except Exception as e:
-        print("Unexpected error in reading file: " + str(e))
+        logging.debug("Unexpected error in reading file: " + str(e))
     
     return data
 
@@ -39,6 +40,9 @@ def write_json_file(file, data):
 parser = argparse.ArgumentParser(description="Set up music bot")
 parser.add_argument("--reset", action="store_true", help="Delete music and metadata before starting the bot")
 args = parser.parse_args()
+
+# Set up logging
+logging.basicConfig(filename="log.txt", encoding="utf-8", level=logging.DEBUG)
 
 # Get api tokens from .env
 load_dotenv()
@@ -220,7 +224,7 @@ def get_song(song_info, is_id=False, download=True):
         if not os.path.exists(file_path):
             os.rename(out_file, file_path)
         else:
-            print("Attempted to download something that has already been downloaded.\n", data)
+            logging.debug("Attempted to download something that has already been downloaded.\n", data)
 
         data["file path"], data["downloaded"] = file_path, True
     
@@ -274,12 +278,12 @@ async def play(ctx, *args):
         songs_to_add.append(yt_id)
         using_id = True
     elif is_spotify_url(url): # We have a spotify url
-        print("getting spotify data")
+        logging.debug("getting spotify data")
         songs_to_add.extend(get_spotify_info(url))
     else: # We have a search query
         songs_to_add.append(" ".join(args))
 
-    print("getting song metadata and adding to queue")
+    logging.debug("getting song metadata and adding to queue")
     for song_info in songs_to_add:
         # Get song metadata without downloading
         # We download just before playing the song to avoid downloading one song while playing another
