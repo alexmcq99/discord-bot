@@ -59,8 +59,6 @@ The bot currently supports the following commands, using the prefix "-" in a tex
 - When given a url to a playlist on youtube, the bot will just play the audio from the first video instead of queueing the entire playlist
 
 ### Future work
-- Make bot automatically leave the voice channel after several minutes of inactivity
 - Add sharding to make the bot scalable if it ever becomes publicly available
 - Add scripts for linux and windows to automate setting up developer environment
-- Set up automaticic docker deployment on Azure
-- Set up pipeline for code changes
+- Move stats to remote database instead of in local files

@@ -51,9 +51,10 @@ SPOTIPY_CLIENT_ID = os.getenv("spotipy_client_id")
 SPOTIPY_CLIENT_SECRET = os.getenv("spotipy_client_secret")
 
 # Constants
-DURATION_LIMIT = 1800 # Any videos longer than this (30 minutes in seconds) will not be downloaded
+DURATION_LIMIT = 1800 # Any videos longer than this (in seconds) will not be downloaded
 MAX_SHOWN_SONGS = 20 # The maximum number of songs to show when displaying the song queue
 SPOTIFY_SONG_LIMIT = 100 # The maximum number of songs to add from a spotify playlist
+INACTIVITY_TIMEOUT = 600 # After this amount of time (in seconds), the bot will disconnect
 
 # Paths
 MUSIC_PATH = "music" # Directory where music files are stored
@@ -393,7 +394,7 @@ async def resume(ctx):
 
 @bot.command(name='stop', aliases=['cancel'], help='Stops the song and clears the queue')
 async def stop(ctx):
-    global curr_song_id, is_looping
+    global curr_song_id, is_looping, song_queue
     if not ctx.voice_client:
         await ctx.send("The bot is not currently in a voice channel.")
     elif not ctx.voice_client.is_playing():
@@ -402,7 +403,7 @@ async def stop(ctx):
         curr_song_id = None
         is_looping = False
         song_queue.clear()
-        ctx.message.guild.voice_client.stop()
+        ctx.voice_client.stop()
         await ctx.send("Stopped current song and cleared the song queue.")
 
 @bot.command(name='shuffle', help='Shuffles the queue randomly')
@@ -525,10 +526,39 @@ async def stats(ctx, *args):
                 msg = "User or song not found."
     await ctx.send(msg)
 
+@bot.event
+async def on_voice_state_update(member, before, after):
+    global curr_song_id, is_looping, song_queue
+    if not member.id == bot.user.id:
+        return
+    elif before.channel is None:
+        voice_client = after.channel.guild.voice_client
+        time = 0
+        while True:
+            await asyncio.sleep(1)
+            time += 1
+            if not voice_client.is_connected():
+                break
+            elif voice_client.is_playing() and not voice_client.is_paused():
+                time = 0
+            elif time == INACTIVITY_TIMEOUT:
+                if voice_client.is_paused(): # If paused, completely stop
+                    curr_song_id = None
+                    is_looping = False
+                    song_queue.clear()
+                    voice_client.stop()
+                logging.debug("Bot disconnected due to inactivity.")
+                await voice_client.disconnect()
+
 if __name__ == "__main__":
     # Register hooks to write the data dictionaries to disk before exiting
     atexit.register(lambda *args: write_json_file(USER_FILE, user_data))
     atexit.register(lambda *args: write_json_file(SONG_FILE, song_data))
 
     # Run the bot
-    bot.run(DISCORD_TOKEN)
+    try:
+        bot.loop.run_until_complete(bot.run(DISCORD_TOKEN))
+    except Exception as e:
+        logging.debug("Exception occurred: " + str(e))
+    finally:
+        bot.loop.close()
