@@ -334,16 +334,17 @@ async def loop(ctx):
 @bot.command(name='showqueue', aliases=['queue', 'status'], help='Shows the current queue and if looping is on.')
 async def showqueue(ctx):
     global is_looping, curr_song_id
-    loop_msg = f"The queue is {'' if is_looping else 'not '}looping.\n" # Display if the queue is looping
+    title_msg = "___**Bot Status**___\n"
+    loop_msg = f"**Looping**: {':white_check_mark:' if is_looping else ':no_entry_sign:'}\n" # Display if the queue is looping
     curr_song_title = song_data[curr_song_id]["title"] if curr_song_id else 'None'
-    curr_song_msg = f"Current song: {curr_song_title}\n" # Display the current song
-    queue_count_msg = f"Number of songs in queue: {len(song_queue)}\n" # Display the length of the queue
+    curr_song_msg = f"**Current song**: {curr_song_title}\n" # Display the current song
+    queue_count_msg = f"**Number of songs in queue**: {len(song_queue)}\n\n" # Display the length of the queue
     if len(song_queue) > 0: # Display only the first few songs
-        queue_header = "Songs in queue:\n" if len(song_queue) <= MAX_SHOWN_SONGS else f"First {MAX_SHOWN_SONGS} songs:\n"
-        queue_contents = "\n".join([f"{i}) {song_data[id]['title']}" for i, id in enumerate(list(song_queue)[:MAX_SHOWN_SONGS], 1)])
+        queue_header = "__**Songs in queue**__\n" if len(song_queue) <= MAX_SHOWN_SONGS else f"__**First {MAX_SHOWN_SONGS} songs**__:\n"
+        queue_contents = "```" + "\n".join([f"{i}) {song_data[id]['title']}" for i, id in enumerate(list(song_queue)[:MAX_SHOWN_SONGS], 1)]) + "```"
     else:
         queue_header, queue_contents = "", ""
-    msg = loop_msg + curr_song_msg + queue_count_msg + queue_header + queue_contents
+    msg = title_msg + loop_msg + curr_song_msg + queue_count_msg + queue_header + queue_contents
     await ctx.send(msg)
 
 @bot.command(name='remove', aliases=['delete'], help='Removes the song at the given position in the queue (1 is first)')

@@ -8,8 +8,9 @@ A youtube music bot for a personal discord server
 3. Put your discord token into `.env` as an environment variable named `discord_token`.  The file should have only one line that looks like this:  
 `discord_token = "<insert actual token here>"`  
 This token will be loaded and used by `app.py`.
+4. This bot also supports spotify with Python's [Spotipy](https://spotipy.readthedocs.io/en/master/) package, so you will need a spotify web API client id and client secret. Follow the instructions [here](https://medium.com/@maxtingle/getting-started-with-spotifys-api-spotipy-197c3dc6353b) to get them, adding them to `.env` as `spotipy_client_id` and `spotipy_client_secret`, just like with the discord token.
 4. Create a virtual environment. The following section will detail how to create one using [Miniconda](https://docs.conda.io/en/latest/miniconda.html), which I prefer, but you can also directly install the dependencies, as long as you have [Python](https://www.python.org/downloads/) installed. Run `pip install -r requirements.txt` and skip the steps for Miniconda if you want to do this.
-5. Download the correct [ffmpeg](https://github.com/BtbN/FFmpeg-Builds/releases) release for your operating system and place `ffmpeg.exe` from the `bin` directory of the downloaded package in the root directory of this repository. You can also run the script `download_ffmpeg.py`, which will do this automatically, for Windows.
+5. Download the correct [ffmpeg](https://github.com/BtbN/FFmpeg-Builds/releases) release for your operating system and place `ffmpeg.exe` from the `bin` directory of the downloaded package in the root directory of this repository. You can also run the script `download_ffmpeg.py` once your virtual environment is set up, which will do this automatically, for Windows.
 
 ### Set up Miniconda environment
 
