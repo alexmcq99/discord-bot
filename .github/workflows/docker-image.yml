@@ -25,6 +25,7 @@ jobs:
         docker push ${ACR}/discord-music-bot:latest
   
   restart:
+    needs: build
     runs-on: ubuntu-latest
     environment: az-credentials-env
     steps:
