@@ -1,6 +1,7 @@
 import argparse
 import asyncio
 import atexit
+from config.config import Config
 import discord
 from dotenv import load_dotenv
 import os
@@ -16,71 +17,48 @@ import spotipy
 from spotipy.oauth2 import SpotifyClientCredentials
 from unidecode import unidecode
 from urllib.parse import urlparse, parse_qs
+from music_bot.utils import read_json_file, write_json_file
 
-# Read a json file to a dictionary
-# Return an empty dictionary if not found
-def read_json_file(file):
-    try:
-        with open(file) as f:
-            data = json.load(f)
-    except FileNotFoundError as e:
-        data = {}
-    except Exception as e:
-        logging.debug("Unexpected error in reading file: " + str(e))
-    
-    return data
+CONFIG_FILE = "config.ini"
 
-# Write data back to disk as json file
-# Done when bot exits, data is stored in dictionaries while running
-def write_json_file(file, data):
-    with open(file, "w") as f:
-        json.dump(data, f, indent=4)
+# Load config
+config = Config(CONFIG_FILE)
 
 # Set up argument parser
-parser = argparse.ArgumentParser(description="Set up music bot")
-parser.add_argument("--reset", action="store_true", help="Delete music and metadata before starting the bot")
-args = parser.parse_args()
+# parser = argparse.ArgumentParser(description="Set up music bot")
+# parser.add_argument("--reset", action="store_true", help="Delete music and metadata before starting the bot")
+# args = parser.parse_args()
 
 # Set up logging
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.DEBUG)
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+console_handler.setFormatter(formatter)
 logging.basicConfig(filename="log.txt", encoding="utf-8", level=logging.DEBUG)
 
-# Get api tokens from .env
-load_dotenv()
-DISCORD_TOKEN = os.getenv("discord_token")
-SPOTIPY_CLIENT_ID = os.getenv("spotipy_client_id")
-SPOTIPY_CLIENT_SECRET = os.getenv("spotipy_client_secret")
-
-# Constants
-DURATION_LIMIT = 1800 # Any videos longer than this (in seconds) will not be downloaded
-MAX_SHOWN_SONGS = 20 # The maximum number of songs to show when displaying the song queue
-SPOTIFY_SONG_LIMIT = 100 # The maximum number of songs to add from a spotify playlist
-INACTIVITY_TIMEOUT = 600 # After this amount of time (in seconds), the bot will disconnect
-
-# Paths
-MUSIC_PATH = "music" # Directory where music files are stored
-SONG_FILE = "song_data.json" # File with metadata on downloaded songs
-USER_FILE = "user_data.json" # File with usage data grouped by user
-FFMPEG_PATH = "ffmpeg"
-
 # Reset downloaded files and metadata if applicable
-if (args.reset):
-    if os.path.exists(MUSIC_PATH):
-        shutil.rmtree(MUSIC_PATH)
-    if os.path.exists(SONG_FILE):
-        os.remove(SONG_FILE)
-    if os.path.exists(USER_FILE):
-        os.remove(USER_FILE)
+if config.reset_music:
+    if os.path.exists(config.music_path):
+        shutil.rmtree(config.music_path)
+
+if config.reset_stats:
+    if os.path.exists(config.song_file):
+        os.remove(config.song_file)
+    if os.path.exists(config.user_file):
+        os.remove(config.user_file)
 
 # Create directory if it doesn't exist
-if not os.path.exists(MUSIC_PATH):
-    os.makedirs(MUSIC_PATH)
+if not os.path.exists(config.music_path):
+    os.makedirs(config.music_path)
 
 # Read files into dictionaries
-song_data = read_json_file(SONG_FILE)
-user_data = read_json_file(USER_FILE)
+song_data = read_json_file(config.song_file)
+user_data = read_json_file(config.user_file)
 
 # Spotify credentials and object
-creds = SpotifyClientCredentials(SPOTIPY_CLIENT_ID, SPOTIPY_CLIENT_SECRET)
+creds = SpotifyClientCredentials(config.spotipy_client_id, config.spotipy_client_secret)
 spotify = spotipy.Spotify(client_credentials_manager=creds)
 
 # Make bot
@@ -112,7 +90,7 @@ def get_spotify_info(url):
         result = spotify.track(id)
         search_list = [f"{result['artists'][0]['name']} - {result['name']}"]
     elif type == "playlist":
-        result = spotify.playlist_tracks(id, limit=SPOTIFY_SONG_LIMIT)
+        result = spotify.playlist_tracks(id, limit=config.spotify_song_limit)
         search_list = [f"{item['track']['artists'][0]['name']} - {item['track']['name']}" for item in result['items']]
     return search_list
 
@@ -145,7 +123,6 @@ def yt_url_to_id(url, ignore_playlist=True):
         if query.path[:3] == '/v/': return query.path.split('/')[2]
    # returns None for invalid YouTube url
 
-
 # Format time string given duration in seconds
 def time_string(duration):
     hours = duration // 3600
@@ -170,7 +147,6 @@ async def join(ctx):
             await ctx.voice_client.move_to(channel)
         return True
 
-
 @bot.command(name='leave', aliases=['die'], help='Leaves the voice channel')
 async def leave(ctx):
     global curr_song_id, is_looping
@@ -192,9 +168,9 @@ def download_song(id):
     if not data["downloaded"]:
         yt = YouTube(yt_id_to_url(id))
         stream = yt.streams.filter(only_audio=True).first()
-        out_file = stream.download(output_path=MUSIC_PATH)
+        out_file = stream.download(output_path=config.music_path)
         base, _ = os.path.splitext(out_file)
-        file_path = os.path.join(MUSIC_PATH, f"{base}.mp3")
+        file_path = os.path.join(config.music_path, f"{base}.mp3")
         
         if not os.path.exists(file_path):
             os.rename(out_file, file_path)
@@ -231,7 +207,7 @@ def play_next(ctx):
         data = song_data[curr_song_id]
         title, file_path = data["title"], data["file path"]
         asyncio.run_coroutine_threadsafe(ctx.send(f'**Now playing:** :notes: {title} :notes:'), loop=bot.loop)
-        ctx.message.guild.voice_client.play(discord.FFmpegPCMAudio(executable=FFMPEG_PATH, source=file_path), after=lambda e: play_next(ctx))
+        ctx.message.guild.voice_client.play(discord.FFmpegPCMAudio(executable=config.ffmpeg_path, source=file_path), after=lambda e: play_next(ctx))
 
         # Increase play count
         song_data[curr_song_id]["times played"] += 1
@@ -285,8 +261,8 @@ async def play(ctx, *args):
         }
         song_data[id] = data
 
-        if duration > DURATION_LIMIT: # Check if song is too long
-            await ctx.send(f":notes: {title} :notes: is too long to send.  Please request something shorter than {time_string(DURATION_LIMIT)}.")
+        if duration > config.duration_limit: # Check if song is too long
+            await ctx.send(f":notes: {title} :notes: is too long to send.  Please request something shorter than {time_string(config.duration_limit)}.")
             continue
         elif duration == 0: # Check if song is a livestream
             await ctx.send(f":notes: {title} :notes: is currently streaming live and cannot be downloaded.")
@@ -329,8 +305,8 @@ async def showqueue(ctx):
     curr_song_msg = f"**Current song**: {curr_song_title}\n" # Display the current song
     queue_count_msg = f"**Number of songs in queue**: {len(song_queue)}\n\n" # Display the length of the queue
     if len(song_queue) > 0: # Display only the first few songs
-        queue_header = "__**Songs in queue**__\n" if len(song_queue) <= MAX_SHOWN_SONGS else f"__**First {MAX_SHOWN_SONGS} songs**__:\n"
-        queue_contents = "```" + "\n".join([f"{i}) {song_data[id]['title']}" for i, id in enumerate(list(song_queue)[:MAX_SHOWN_SONGS], 1)]) + "```"
+        queue_header = "__**Songs in queue**__\n" if len(song_queue) <= config.max_shown_songs else f"__**First {config.max_shown_songs} songs**__:\n"
+        queue_contents = "```" + "\n".join([f"{i}) {song_data[id]['title']}" for i, id in enumerate(list(song_queue)[:config.max_shown_songs], 1)]) + "```"
     else:
         queue_header, queue_contents = "", ""
     msg = title_msg + loop_msg + curr_song_msg + queue_count_msg + queue_header + queue_contents
@@ -338,6 +314,10 @@ async def showqueue(ctx):
 
 @bot.command(name='remove', aliases=['delete'], help='Removes the song at the given position in the queue (1 is first)')
 async def remove(ctx, position):
+    if len(song_queue) == 0:
+        await ctx.send(f"The queue is empty, so there's nothing to remove. Did you mean to skip?")
+        return
+
     position = int(position)
     if position > 0 and position <= len(song_queue):
         title = song_data[song_queue[position - 1]]["title"]
@@ -373,7 +353,7 @@ async def pause(ctx):
     else:
         ctx.voice_client.pause()
     
-@bot.command(name='resume', aliases=['continue'], help='Resumes the song')
+@bot.command(name='resume', aliases=['unpause', 'continue'], help='Resumes the song')
 async def resume(ctx):
     if not ctx.voice_client:
         await ctx.send("The bot is not currently in a voice channel.")
@@ -529,9 +509,9 @@ async def on_voice_state_update(member, before, after):
             time += 1
             if not voice_client.is_connected():
                 break
-            elif voice_client.is_playing() and not voice_client.is_paused():
+            elif voice_client.is_playing() and not voice_client.is_paused() and after.channel.members.size >= 1:
                 time = 0
-            elif time == INACTIVITY_TIMEOUT:
+            elif time == config.inactivity_timeout:
                 if voice_client.is_paused(): # If paused, completely stop
                     curr_song_id = None
                     is_looping = False
@@ -542,12 +522,12 @@ async def on_voice_state_update(member, before, after):
 
 if __name__ == "__main__":
     # Register hooks to write the data dictionaries to disk before exiting
-    atexit.register(lambda *args: write_json_file(USER_FILE, user_data))
-    atexit.register(lambda *args: write_json_file(SONG_FILE, song_data))
+    atexit.register(lambda *args: write_json_file(config.user_file, user_data))
+    atexit.register(lambda *args: write_json_file(config.song_file, song_data))
 
     # Run the bot
     try:
-        bot.loop.run_until_complete(bot.run(DISCORD_TOKEN))
+        bot.loop.run_until_complete(bot.run(config.discord_token))
     except Exception as e:
         logging.debug("Exception occurred: " + str(e))
     finally:
