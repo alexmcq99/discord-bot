@@ -3,7 +3,7 @@ from urllib.parse import urlparse, parse_qs
 
 # Returns youtube video url given its id
 def id_to_url(id):
-    return "https://www.youtube.com/watch?v=" + id
+    return "http://youtu.be/" + id
 
 # Returns a youtube video id given its url
 # Will return None if there is no valid id

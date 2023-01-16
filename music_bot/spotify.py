@@ -16,6 +16,7 @@ class SpotifyClientWrapper:
         self.config = config
         creds = SpotifyClientCredentials(config.spotipy_client_id, config.spotipy_client_secret)
         self.spotify_client = Spotify(client_credentials_manager=creds)
+        print("made client wrapper")
 
     # Return list of search queries (strings to search) for each song in an album or playlist
     # If given a link to a track, returns a list with a single element
