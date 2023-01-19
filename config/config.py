@@ -11,7 +11,7 @@ class Config():
         self.spotipy_client_secret = os.getenv("spotipy_client_secret")
         
         # Parse config file
-        config_parser = ConfigParser()
+        config_parser = ConfigParser(inline_comment_prefixes=(";",))
         config_parser.read(file)
 
         self.reset_music = config_parser.getboolean("Parameters", "ResetMusic", fallback=False)

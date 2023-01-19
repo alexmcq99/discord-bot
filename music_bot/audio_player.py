@@ -1,7 +1,9 @@
 import asyncio
+import concurrent.futures
 from discord import VoiceClient
 from discord.ext.commands import Bot
 from .songs import SongRequest, SongRequestQueue
+import traceback
 
 class AudioError(Exception):
     pass
@@ -26,29 +28,35 @@ class AudioPlayer:
         return self.voice_client and self.current_song
 
     async def play_audio(self) -> None:
-        while True:
-            self.play_next_song_event.clear()
+        try:
+            while True:
+                self.play_next_song_event.clear()
 
-            try:
-                await asyncio.wait_for(self.poll_song_queue(), self.inactivity_timeout)
-            except asyncio.TimeoutError:
-                self.bot.loop.create_task(self.stop())
-                return
+                try:
+                    await asyncio.wait_for(self.poll_request_queue(), self.inactivity_timeout)
+                except asyncio.TimeoutError:
+                    self.bot.loop.create_task(self.stop())
+                    return
 
-            if not self.current_song.downloaded:
-                await self.ctx.send(f"Downloading {self.current_song.title}, please wait.")
-                await self.current_song.download_event.wait()
-            
-            self.current_song.audio_source.volume = self.volume
-            self.voice_client.play(self.current_song.audio_source, after=self.play_next_song)
-            print(f"Sending embed")
-            await self.current_song.channel_where_requested.send(embed=self.current_song.create_embed())
+                print("Checking if we need to download")
+                if not self.current_song.is_downloaded():
+                    await self.current_song.channel_where_requested.send(f"Still downloading {self.current_song}, please wait.")
+                    futures = (self.current_song.download_future,)
+                    concurrent.futures.wait(futures)
+                
+                print("about to play song")
+                self.current_song.audio_source.volume = self.volume
+                self.voice_client.play(self.current_song.audio_source, after=self.play_next_song)
+                print(f"Sending embed")
+                await self.current_song.channel_where_requested.send(embed=self.current_song.create_embed())
 
-            await self.play_next_song_event.wait()
+                await self.play_next_song_event.wait()
+        except Exception as e:
+            print("PRINTING EXCEPTION: ", traceback.format_exc())
 
-    async def poll_song_queue(self):
+    async def poll_request_queue(self):
         print("waiting to poll")
-        self.current_song = await self.song_queue.get()
+        self.current_song = await self.request_queue.get()
 
     def play_next_song(self, error=None):
         if error:
@@ -62,8 +70,12 @@ class AudioPlayer:
         self.play_next_song_event.set()
 
     def skip(self):
-        if self.is_playing:
+        if self.voice_client.is_playing():
             self.voice_client.stop()
+        elif self.current_song.download_future:
+            self.current_song.download_future.cancel()
+        else:
+            raise AudioError("Uh oh, this shouldn't be possible.")
 
     async def stop(self):
         self.request_queue.clear()

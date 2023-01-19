@@ -1,4 +1,3 @@
-import asyncio
 from .audio_player import AudioPlayer
 from config.config import Config
 import discord
@@ -11,9 +10,9 @@ class MusicCog(commands.Cog):
     def __init__(self, bot: commands.Bot, config: Config):
         self.bot: commands.Bot = bot
         self.config: Config = config
-        self.audio_players: dict[int, AudioPlayer] = dict()
-        self.download_manager: Downloader = Downloader(bot)
         self.song_factory: SongFactory = SongFactory(config, bot)
+        self.audio_players: dict[int, AudioPlayer] = dict()
+        self.downloader: Downloader = Downloader()
 
     def get_audio_player(self, guild_id: int) -> AudioPlayer:
         audio_player = self.audio_players.get(guild_id)
@@ -24,10 +23,14 @@ class MusicCog(commands.Cog):
             self.audio_players[guild_id] = audio_player
             print(f"Stored audio manager: {audio_player}")
         return audio_player
-        
+    
+    def cog_load(self):
+        self.song_factory.load_downloaded_songs()
+
     def cog_unload(self):
         for audio_player in self.audio_players.values():
             self.bot.loop.create_task(audio_player.stop())
+        del self.downloader
 
     def cog_check(self, ctx: commands.Context):
         if not ctx.guild:
@@ -46,6 +49,14 @@ class MusicCog(commands.Cog):
         except Exception as e:
             print("Exception when printing exception: ", str(e))
     
+    async def cog_command_error(self, ctx: commands.Context, error: commands.CommandError):
+        if isinstance(error, commands.CommandNotFound):
+            await ctx.send("Command not found. Try \"-help\" to get a list of available commands.")
+        elif isinstance(error, commands.UserInputError):
+            await ctx.send(f"Bad user input received: {str(error)}")
+        
+        await ctx.send('An error occurred: {}'.format(str(error)))
+    
     @commands.command(name='join', aliases=['summon'], invoke_without_subcommand=True)
     async def join(self, ctx: commands.Context):
         """Joins a voice channel."""
@@ -58,18 +69,17 @@ class MusicCog(commands.Cog):
         ctx.audio_player.voice_client = await destination.connect()
 
     @commands.command(name='leave', aliases=['disconnect', 'die'])
-    @commands.has_permissions(manage_guild=True)
     async def leave(self, ctx: commands.Context):
         """Clears the queue and leaves the voice channel."""
 
-        if not ctx.audio_player.voice:
+        if not ctx.audio_player.voice_client:
             return await ctx.send('Not connected to any voice channel.')
 
         await ctx.audio_player.stop()
         del self.audio_players[ctx.guild.id]
 
     @commands.command(name='volume')
-    async def volume(self, ctx: commands.Context, volume: str):
+    async def volume(self, ctx: commands.Context, *, volume: int):
         """Sets the volume of the player."""
 
         if not ctx.audio_player.is_playing:
@@ -82,7 +92,6 @@ class MusicCog(commands.Cog):
         await ctx.send('Volume of the player set to {}%'.format(volume))
 
     @commands.command(name='pause')
-    @commands.has_permissions(manage_guild=True)
     async def pause(self, ctx: commands.Context):
         """Pauses the currently playing song."""
 
@@ -91,7 +100,6 @@ class MusicCog(commands.Cog):
             await ctx.message.add_reaction('⏯')
 
     @commands.command(name='resume')
-    @commands.has_permissions(manage_guild=True)
     async def resume(self, ctx: commands.Context):
         """Resumes a currently paused song."""
 
@@ -100,7 +108,6 @@ class MusicCog(commands.Cog):
             await ctx.message.add_reaction('⏯')
 
     @commands.command(name='stop')
-    @commands.has_permissions(manage_guild=True)
     async def stop(self, ctx: commands.Context):
         """Stops playing song and clears the queue."""
 
@@ -125,7 +132,7 @@ class MusicCog(commands.Cog):
         You can optionally specify the page to show. Each page contains 10 elements.
         """
 
-        if ctx.audio_player.request_queue:
+        if not ctx.audio_player.request_queue:
             return await ctx.send('Empty queue.')
 
         items_per_page = 10
@@ -134,12 +141,15 @@ class MusicCog(commands.Cog):
         start = (page - 1) * items_per_page
         end = start + items_per_page
 
-        queue = ''
+        queue_str = ""
         for i, song in enumerate(ctx.audio_player.request_queue[start:end], start=start):
-            queue += '`{0}.` [**{1.source.title}**]({1.source.url})\n'.format(i + 1, song)
+            queue_str += f"`{i + 1}.`  [**{song.title}**]({song.watch_url})\n"
 
-        embed = (discord.Embed(description='**{} tracks:**\n\n{}'.format(len(ctx.audio_player.request_queue), queue))
-                 .set_footer(text='Viewing page {}/{}'.format(page, pages)))
+        embed = (discord.Embed(title=f"**Song queue has {len(ctx.audio_player.request_queue)} tracks**:",
+                description=queue_str,
+                color=discord.Color.random()
+                )
+                .set_footer(text=f"Viewing page {page}/{pages}"))
         await ctx.send(embed=embed)
 
     @commands.command(name='shuffle')
@@ -171,7 +181,7 @@ class MusicCog(commands.Cog):
         if not ctx.audio_player.is_playing:
             return await ctx.send('Nothing being played at the moment.')
 
-        ctx.audio_player.loop = not ctx.audio_player.loop
+        ctx.audio_player.is_looping = not ctx.audio_player.is_looping
         await ctx.message.add_reaction('✅')
         
     @commands.command(name='play')
@@ -181,18 +191,18 @@ class MusicCog(commands.Cog):
         other songs finished playing.
         """
 
+        # TODO: music lags really bad whenever i download another song in the background
+        # TODO: sometimes the bot just doesn't download the song
         if not args:
             raise commands.CommandError("No arguments provided. Please provide a url or search query.")
 
         async with ctx.typing():
-            self.song_factory.ctx = ctx
-            song_requests = self.song_factory.create_song_requests(args)
-
+            song_requests = self.song_factory.create_song_requests(ctx, args)
+            self.downloader.queue_downloads_if_necessary(song_requests)
             if not ctx.audio_player.voice_client:
                 await ctx.invoke(self.join)
             for request in song_requests:
                 await ctx.audio_player.request_queue.put(request)
-                await self.dow
                 await ctx.send(f"Enqueued {request}.")
 
     @join.before_invoke
