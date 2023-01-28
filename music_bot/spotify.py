@@ -1,7 +1,6 @@
+from asyncspotify import Client, ClientCredentialsFlow
 from config.config import Config
 import re
-from spotipy import Spotify
-from spotipy.oauth2 import SpotifyClientCredentials
 from urllib.parse import urlparse
 
 def is_spotify_url(url):
@@ -11,26 +10,35 @@ def is_spotify_url(url):
         pattern = re.compile(r"^https:\/\/open.spotify.com\/(?:track|album|playlist)\/[a-zA-Z0-9]+")
         return pattern.match(url)
         
+def get_track_search_query(track):
+    return f"{track.artists[0].name} - {track.name}"
+
 class SpotifyClientWrapper:
     def __init__(self, config: Config) -> None:
-        self.config = config
-        creds = SpotifyClientCredentials(config.spotipy_client_id, config.spotipy_client_secret)
-        self.spotify_client = Spotify(client_credentials_manager=creds)
+        self.auth = ClientCredentialsFlow(client_id=config.spotipy_client_id, client_secret=config.spotipy_client_secret)
 
     # Return list of search queries (strings to search) for each song in an album or playlist
     # If given a link to a track, returns a list with a single element
-    def get_search_queries(self, url):
-        parse_result = urlparse(url)
-        _, type, id = parse_result.path.split("/")
-        search_list = []
-        if type == "album":
-            result = self.spotify_client.album(id)
-            search_list = [f"{track['artists'][0]['name']} - {track['name']}" for track in result['tracks']['items']]
-        elif type == "track":
-            result = self.spotify_client.track(id)
-            search_list = [f"{result['artists'][0]['name']} - {result['name']}"]
-        else:
-            result = self.spotify_client.playlist_tracks(id, limit=self.config.spotify_song_limit)
-            search_list = [f"{item['track']['artists'][0]['name']} - {item['track']['name']}" for item in result['items']]
-        return search_list
+    async def get_search_queries(self, url, tries=3):
+        async with Client(self.auth) as sp_client:
+            parse_result = urlparse(url)
+            _, type, id = parse_result.path.split("/")
+            tracks = []
+            get = getattr(sp_client, f"get_{type}")
+            result = None
+            while not result and tries > 0:
+                try:
+                    result = await get(id)
+                except Exception as e:
+                    print("Exception when getting data from Spotify: ", e)
+                    print("Trying again." if tries > 0 else "Out of tries.")
+                    tries -= 1
+            if not result:
+                return result
+            if type == "track":
+                tracks.append(result)
+            else:
+                tracks.extend(result.tracks)
+            search_list = [get_track_search_query(track) for track in tracks]
+            return search_list
 

@@ -35,6 +35,4 @@ if __name__ == "__main__":
         bot.run(config.discord_token)
     except Exception as e:
         print("Exception occurred: " + str(e))
-    finally:
-        bot.loop.close()
     print("ran the bot")

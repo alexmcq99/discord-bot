@@ -31,7 +31,13 @@ music/
 log.txt
 
 # Testing
+app.py
+base.py
 test.py
+baka_mitai_formats.json
+baka_mitai.json
+baka_mitai_search.json
+yakuza_0_karaoke_disco_songs.json
 
 # Data files
 data/

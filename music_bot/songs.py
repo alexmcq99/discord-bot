@@ -1,94 +1,47 @@
 from config.config import Config
 import asyncio
-import pebble
 import discord
 from discord.abc import GuildChannel
-from discord.ext.commands import Bot, Context, UserInputError
+from discord.ext.commands import Context
 import itertools
-import os
-from pytube import Playlist, Search, YouTube
 import random
-from .spotify import is_spotify_url, SpotifyClientWrapper
+from .spotify import SpotifyClientWrapper
+import traceback
 from typing import Any
-from unidecode import unidecode
-import validators
-from .youtube import is_video, is_playlist, url_to_id
+from .youtube import YoutubePlaylist, YoutubeVideo
 
 class Song:
-    def __init__(self, video_id: str, music_path: str, ffmpeg_path: str):
-        self.yt: YouTube = YouTube.from_id(video_id)
-        self.music_path: str = music_path
-        self.ffmpeg_path: str = ffmpeg_path
-        self.file_name: str = f"{self.video_id}.mp3"
-        self.file_path: str = os.path.join(self.music_path, self.file_name)
-        self.already_downloaded: bool = os.path.exists(self.file_path)
-        self.download_future: pebble.ProcessFuture = None
-        self.formatted_duration: str = Song.format_duration(self.length)
-    
-    @property
-    def audio_source(self) -> discord.PCMVolumeTransformer:
-        return discord.PCMVolumeTransformer(discord.FFmpegPCMAudio(executable=self.ffmpeg_path, source=self.file_path))
+    FFMPEG_OPTIONS = {
+        'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
+        'options': '-vn',
+    }
 
-    def __getattr__(self, __name: str) -> Any:
-        return getattr(self.yt, __name)
-    
-    def __str__(self):
-        return f"**{self.title}** by **{self.author}**"
-    
-    def is_downloaded(self) -> bool:
-        print(f"is {self} already downloaded?", self.already_downloaded)
-        if self.download_future:
-            print("cancelled?", self.download_future.cancelled())
-            print("done?", self.download_future.done())
-            print(self.download_future and not self.download_future.cancelled() and self.download_future.done())
-            try:
-                print("exception: ", self.download_future.exception())
-            except Exception as e:
-                print("exception when pring exception: ", e)
-
-        downloaded = self.already_downloaded or (self.download_future and not self.download_future.cancelled() and self.download_future.done())
-        print(f"is {self} downloaded?", downloaded)
-        return downloaded
-
-    def download(self) -> None:
-        try:
-            print(f"Downloading {self}")
-            stream = self.yt.streams.filter(only_audio=True).first()
-            print(f"Got the stream, downloading to {self.file_path}")
-            stream.download(output_path=self.music_path, filename=self.file_name)
-            print("hopefully a success?")
-        except Exception as e:
-            print("exception when downloading: ", str(e))
-    
-    @staticmethod
-    def format_duration(duration: int):
-        minutes, seconds = divmod(duration, 60)
-        hours, minutes = divmod(minutes, 60)
-        return f"{str(hours).zfill(2)}:{str(minutes).zfill(2)}:{str(seconds).zfill(2)}"
-
-class SongRequest():
-    def __init__(self, song: Song, requester: discord.Member, channel: GuildChannel) -> None:
-        self.song: Song = song
+    def __init__(self, yt_video: YoutubeVideo, requester: discord.Member, channel: GuildChannel) -> None:
+        self.yt_video: YoutubeVideo = yt_video
         self.requester: discord.Member = requester
         self.channel_where_requested: GuildChannel = channel
+
+    @property
+    def audio_source(self) -> discord.FFmpegOpusAudio:
+        return discord.FFmpegOpusAudio(source=self.stream_url, **Song.FFMPEG_OPTIONS)
     
     def create_embed(self) -> discord.Embed:
         return (discord.Embed(title="Current song:",
                 type="rich",
-                description=f"[{self.title}]({self.watch_url})",
+                description=f"[{self.title}]({self.video_url})",
                 color=discord.Color.random())
                 .add_field(name="Duration", value=self.formatted_duration)
                 .add_field(name="Requested by", value=self.requester.mention)
-                .add_field(name="Uploader", value=f"[{self.author}]({self.channel_url})")
+                .add_field(name="Uploader", value=f"[{self.channel_name}]({self.channel_url})")
                 .set_thumbnail(url=self.thumbnail_url))
 
-    def __getattr__(self, __name):
-        return getattr(self.song, __name)
-
     def __str__(self):
-        return str(self.song)
+        return f":notes: **{self.title}** :notes: by **{self.channel_name}**"
+    
+    def __getattr__(self, __name) -> Any:
+        return getattr(self.yt_video, __name)
 
-class SongRequestQueue(asyncio.Queue):
+class SongQueue(asyncio.Queue):
     def __getitem__(self, item):
         if isinstance(item, slice):
             return list(itertools.islice(self._queue, item.start, item.stop, item.step))
@@ -114,57 +67,72 @@ class SongRequestQueue(asyncio.Queue):
         del self._queue[index]
 
 class SongFactory:
-    def __init__(self, config: Config, bot: Bot) -> None:
+    def __init__(self, config: Config) -> None:
         self.config: Config = config
-        self.bot: Bot = bot
         self.ctx: Context = None
-        self.encountered_songs: dict[str, Song] = dict()
         self.spotify_client_wrapper = SpotifyClientWrapper(config)
-
-    def create_song(self, yt_video_id):
-        song = Song(yt_video_id, self.config.music_path, self.config.ffmpeg_path)
-        self.encountered_songs[yt_video_id] = song
-
-    def load_downloaded_songs(self):
-        print("loading downloaded songs")
-        for song_file in os.listdir(self.config.music_path):
-            yt_video_id, _ = os.path.splitext(song_file)
-            self.create_song(yt_video_id)
-
-    def create_song_from_youtube_video(self, yt_video_url: str = None) -> Song:
-        yt_video_id = url_to_id(yt_video_url, ignore_playlist=True)
-        print("Getting song, is it in the dict? ", yt_video_id in self.encountered_songs)
-        song = self.encountered_songs.get(yt_video_id, self.create_song(yt_video_id))
-        return song
-
-    def create_song_from_youtube_search(self, search_query: str = None) -> Song:
-        search = Search(unidecode(search_query))
-        if not search.results:
-            asyncio.run_coroutine_threadsafe(self.ctx.send(f"YouTube search \"{search_query}\" did not yield any results. Ignoring and continuing."), loop=self.bot.loop)
-        yt_video_url = search.results[0].watch_url
-        return self.create_song_from_youtube_video(yt_video_url)
-
-    def create_songs_from_youtube_playlist(self, yt_playlist_url: str = None) -> list[Song]:
-        playlist = Playlist(yt_playlist_url)
-        return [self.create_song_from_youtube_video(yt_video_url) for yt_video_url in playlist.video_urls]
-
-    def create_songs_from_spotify(self, spotify_url: str = None) -> list[Song]:
-        return [self.create_song_from_youtube_search(search_query) for search_query in self.spotify_client_wrapper.get_search_queries(spotify_url)]
     
-    def create_song_requests(self, ctx: Context, args: list[str]) -> list[SongRequest]:
+    async def create_songs(
+            self, ctx: Context, *,
+            yt_search_query: str = None,
+            yt_video_urls: list[str] = [],
+            yt_playlist_urls: list[str] = [],
+            spotify_urls: list[str] = []) -> list[Song]:
         self.ctx = ctx
-        possible_url = args[0]
         songs = []
-        if not validators.url(possible_url):
-            search_query = " ".join(args)
-            songs.append(self.create_song_from_youtube_search(search_query))
-        elif is_video(possible_url):
-            songs.append(self.create_song_from_youtube_video(possible_url))
-        elif is_playlist(possible_url):
-            songs.extend(self.create_songs_from_youtube_playlist(possible_url))
-        elif is_spotify_url(possible_url):
-            songs.extend(self.create_songs_from_spotify(possible_url))
-        else:
-            raise UserInputError(f"Argument {possible_url} is structured like a url but is not a valid YouTube or Spotify url.")
-            
-        return [SongRequest(song, self.ctx.message.author, self.ctx.channel) for song in songs]
+        print("about to create song")
+        songs.append(await self.create_song_from_yt_search(yt_search_query))
+        songs.extend(await self.create_songs_from_yt_video_urls(yt_video_urls))
+        songs.extend(await self.create_songs_from_yt_playlist_urls(yt_playlist_urls))
+        songs.extend(await self.create_songs_from_spotify_urls(spotify_urls))
+        print("got song requests, returning")
+        return [song for song in songs if song]
+    
+    async def create_songs_from_yt_playlist_urls(self, yt_playlist_urls: list[str]) -> list[Song]:
+        tasks = [self.create_songs_from_yt_playlist_url(yt_playlist_url) for yt_playlist_url in yt_playlist_urls]
+        song_lists = await asyncio.gather(*tasks, return_exceptions=True)
+        for p in song_lists:
+            if isinstance(p, Exception):
+                traceback.print_exception(p)
+        return [song for song_list in song_lists for song in song_list]
+    
+    async def create_songs_from_yt_playlist_url(self, yt_playlist_url: str) -> list[Song]:
+        yt_playlist = await YoutubePlaylist.from_url(yt_playlist_url)
+        return [self.create_song(yt_video) for yt_video in yt_playlist.videos]
+
+    async def create_songs_from_spotify_urls(self, spotify_urls: list[str]) -> list[Song]:
+        tasks = [self.create_songs_from_spotify_url(spotify_url) for spotify_url in spotify_urls]
+        song_lists = await asyncio.gather(*tasks, return_exceptions=True)
+        for p in song_lists:
+            if isinstance(p, Exception):
+                traceback.print_exception(p)
+            print(p)
+        return [song for song_list in song_lists for song in song_list]
+    
+    async def create_songs_from_spotify_url(self, spotify_url: str) -> list[Song]:
+        search_queries = await self.spotify_client_wrapper.get_search_queries(spotify_url)
+        if not search_queries:
+            await self.ctx.send(f"Spotify url \"{spotify_url}\" did not yield any results.")
+        tasks = [self.create_song_from_yt_search(search_query) for search_query in search_queries]
+        return await asyncio.gather(*tasks, return_exceptions=True)
+
+    async def create_song_from_yt_search(self, yt_search_query: str) -> Song:
+        yt_video = await YoutubeVideo.from_search_query(yt_search_query)
+        if yt_search_query and not yt_video:
+            await self.ctx.send(f"Youtube search \"{yt_search_query}\" did not yield any results.")
+        return self.create_song(yt_video)
+
+    async def create_songs_from_yt_video_urls(self, yt_video_urls: list[str]) -> list[Song]:
+        tasks = [self.create_songs_from_yt_video_url(yt_video_url) for yt_video_url in yt_video_urls]
+        return await asyncio.gather(*tasks, return_exceptions=True)
+    
+    async def create_songs_from_yt_video_url(self, yt_video_url: str) -> Song:
+        yt_video = await YoutubeVideo.from_url(yt_video_url)
+        if not yt_video:
+            await self.ctx.send(f"Youtube video at \"{yt_video_url}\" is not available.")
+        return self.create_song(yt_video)
+    
+    def create_song(self, yt_video: YoutubeVideo) -> Song:
+        if not yt_video:
+            return None
+        return Song(yt_video, self.ctx.message.author, self.ctx.channel)

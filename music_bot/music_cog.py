@@ -2,19 +2,37 @@ from .audio_player import AudioPlayer
 from config.config import Config
 import discord
 from discord.ext import commands
-from .downloader import Downloader
 import math
 from .songs import SongFactory
+from .spotify import is_spotify_url
+import traceback
+import validators
+from .youtube import is_yt_playlist, is_yt_video
 
 class MusicCog(commands.Cog):
     def __init__(self, bot: commands.Bot, config: Config):
         self.bot: commands.Bot = bot
         self.config: Config = config
-        self.song_factory: SongFactory = SongFactory(config, bot)
+        self.song_factory: SongFactory = SongFactory(config)
         self.audio_players: dict[int, AudioPlayer] = dict()
-        self.downloader: Downloader = Downloader()
+        self.default_reaction: str = "✅"
+        self.reactions: dict[str, str] = {
+            "join": "👋",
+            "leave": "👋",
+            "pause": "⏯",
+            "resume": "⏯",
+            "stop": "⏹",
+            "skip": "⏭",
+            "play": "🎵",
+            "loop": "🔁",
+            "now": "✅",
+            "queue": "✅",
+            "shuffle": "🔀",
+            "remove": "❌"
+        }
 
     def get_audio_player(self, guild_id: int) -> AudioPlayer:
+        print(type(self.audio_players))
         audio_player = self.audio_players.get(guild_id)
         if audio_player:
             print("Retrieved audio manager")
@@ -24,13 +42,13 @@ class MusicCog(commands.Cog):
             print(f"Stored audio manager: {audio_player}")
         return audio_player
     
-    def cog_load(self):
-        self.song_factory.load_downloaded_songs()
+    async def cog_load(self):
+        # await self.song_factory.load_downloaded_songs()
+        print("booting up")
 
     def cog_unload(self):
         for audio_player in self.audio_players.values():
             self.bot.loop.create_task(audio_player.stop())
-        del self.downloader
 
     def cog_check(self, ctx: commands.Context):
         if not ctx.guild:
@@ -48,14 +66,17 @@ class MusicCog(commands.Cog):
             print(f"Exception in audio player: {ctx.audio_player.audio_player.exception()}")
         except Exception as e:
             print("Exception when printing exception: ", str(e))
+        await ctx.message.add_reaction(self.reactions.get(ctx.command.name, self.default_reaction))
     
-    async def cog_command_error(self, ctx: commands.Context, error: commands.CommandError):
+    @commands.Cog.listener()
+    async def on_command_error(self, ctx: commands.Context, error: commands.CommandError):
         if isinstance(error, commands.CommandNotFound):
-            await ctx.send("Command not found. Try \"-help\" to get a list of available commands.")
+            await ctx.send(f"Command not found. Type \"-help\" to see the list of valid commands.")
         elif isinstance(error, commands.UserInputError):
             await ctx.send(f"Bad user input received: {str(error)}")
-        
-        await ctx.send('An error occurred: {}'.format(str(error)))
+        else:
+            await ctx.send(f"An error occurred in {ctx.command.name}: {str(error)}")
+        traceback.print_exception(error)
     
     @commands.command(name='join', aliases=['summon'], invoke_without_subcommand=True)
     async def join(self, ctx: commands.Context):
@@ -63,7 +84,7 @@ class MusicCog(commands.Cog):
 
         destination = ctx.author.voice.channel
         if ctx.audio_player.voice_client:
-            await ctx.audio_player.voice.move_to(destination)
+            await ctx.audio_player.voice_client.move_to(destination)
             return
 
         ctx.audio_player.voice_client = await destination.connect()
@@ -77,45 +98,33 @@ class MusicCog(commands.Cog):
 
         await ctx.audio_player.stop()
         del self.audio_players[ctx.guild.id]
-
-    @commands.command(name='volume')
-    async def volume(self, ctx: commands.Context, *, volume: int):
-        """Sets the volume of the player."""
-
-        if not ctx.audio_player.is_playing:
-            return await ctx.send('Nothing being played at the moment.')
-
-        if 0 > volume > 100:
-            return await ctx.send('Volume must be between 0 and 100')
-
-        ctx.audio_player.volume = volume / 100
-        await ctx.send('Volume of the player set to {}%'.format(volume))
-
+        
     @commands.command(name='pause')
     async def pause(self, ctx: commands.Context):
         """Pauses the currently playing song."""
 
-        if ctx.audio_player.is_playing and ctx.audio_player.voice.is_playing():
-            ctx.audio_player.voice.pause()
-            await ctx.message.add_reaction('⏯')
+        if not ctx.audio_player.is_playing:
+            return await ctx.send('There\'s no music to pause.')
+        elif ctx.audio_player.voice_client.is_playing():
+            ctx.audio_player.voice_client.pause()
 
-    @commands.command(name='resume')
+    @commands.command(name='resume', aliases=['unpause', 'continue'])
     async def resume(self, ctx: commands.Context):
         """Resumes a currently paused song."""
 
-        if ctx.audio_player.is_playing and ctx.audio_player.voice.is_paused():
-            ctx.audio_player.voice.resume()
-            await ctx.message.add_reaction('⏯')
+        if not ctx.audio_player.is_playing:
+            return await ctx.send('There\'s no music to resume.')
+        elif ctx.audio_player.voice_client.is_paused():
+            ctx.audio_player.voice_client.resume()
 
     @commands.command(name='stop')
     async def stop(self, ctx: commands.Context):
         """Stops playing song and clears the queue."""
 
-        ctx.audio_player.request_queue.clear()
+        ctx.audio_player.song_queue.clear()
 
         if ctx.audio_player.is_playing:
-            ctx.audio_player.voice.stop()
-            await ctx.message.add_reaction('⏹')
+            ctx.audio_player.voice_client.stop()
 
     @commands.command(name='skip')
     async def skip(self, ctx: commands.Context):
@@ -123,8 +132,25 @@ class MusicCog(commands.Cog):
         if not ctx.audio_player.is_playing:
             return await ctx.send('Not playing any music right now.')
 
-        await ctx.message.add_reaction('⏭')
         ctx.audio_player.skip()
+
+    @commands.command(name='status')
+    async def status(self, ctx: commands.Context):
+        """Shows the current song and queue, if any.
+        """
+
+        await ctx.invoke(self.now)
+        await ctx.invoke(self.queue)
+
+    @commands.command(name='now', aliases=['current', 'playing'])
+    async def now(self, ctx: commands.Context):
+        """Shows the current song, if any.
+        """
+
+        if not ctx.audio_player.is_playing:
+            return await ctx.send('Not playing any music right now.')
+        
+        await ctx.send(embed=ctx.audio_player.current_song.create_embed())
 
     @commands.command(name='queue')
     async def queue(self, ctx: commands.Context, *, page: int = 1):
@@ -132,20 +158,20 @@ class MusicCog(commands.Cog):
         You can optionally specify the page to show. Each page contains 10 elements.
         """
 
-        if not ctx.audio_player.request_queue:
+        if not ctx.audio_player.song_queue:
             return await ctx.send('Empty queue.')
 
-        items_per_page = 10
-        pages = math.ceil(len(ctx.audio_player.request_queue) / items_per_page)
+        pages = math.ceil(len(ctx.audio_player.song_queue) / self.config.max_shown_songs)
 
-        start = (page - 1) * items_per_page
-        end = start + items_per_page
+        start = (page - 1) * self.config.max_shown_songs
+        end = start + self.config.max_shown_songs
 
         queue_str = ""
-        for i, song in enumerate(ctx.audio_player.request_queue[start:end], start=start):
-            queue_str += f"`{i + 1}.`  [**{song.title}**]({song.watch_url})\n"
+        for i, song in enumerate(ctx.audio_player.song_queue[start:end], start=start):
+            queue_str += f"`{i + 1}.`  [**{song.title}**]({song.video_url})\n"
 
-        embed = (discord.Embed(title=f"**Song queue has {len(ctx.audio_player.request_queue)} tracks**:",
+        embed_title = f"**Song queue has {len(ctx.audio_player.song_queue)} track{'s' if len(ctx.audio_player.song_queue) > 1 else ''}**:"
+        embed = (discord.Embed(title=embed_title,
                 description=queue_str,
                 color=discord.Color.random()
                 )
@@ -156,21 +182,19 @@ class MusicCog(commands.Cog):
     async def shuffle(self, ctx: commands.Context):
         """Shuffles the queue."""
 
-        if not ctx.audio_player.request_queue:
+        if not ctx.audio_player.song_queue:
             return await ctx.send('Empty queue.')
 
-        ctx.audio_player.request_queue.shuffle()
-        await ctx.message.add_reaction('✅')
+        ctx.audio_player.song_queue.shuffle()
 
     @commands.command(name='remove')
     async def remove(self, ctx: commands.Context, index: int):
         """Removes a song from the queue at a given index."""
 
-        if not ctx.audio_player.request_queue:
+        if not ctx.audio_player.song_queue:
             return await ctx.send('Empty queue.')
 
-        ctx.audio_player.request_queue.remove(index - 1)
-        await ctx.message.add_reaction('✅')
+        ctx.audio_player.song_queue.remove(index - 1)
 
     @commands.command(name='loop')
     async def loop(self, ctx: commands.Context):
@@ -182,8 +206,32 @@ class MusicCog(commands.Cog):
             return await ctx.send('Nothing being played at the moment.')
 
         ctx.audio_player.is_looping = not ctx.audio_player.is_looping
-        await ctx.message.add_reaction('✅')
+    
+    async def parse_play_args(self, ctx: commands.Context, args: tuple[str]):
+        if not args:
+            raise commands.UserInputError("No arguments provided. Please provide a url or search query.")
         
+        kwargs = {
+            "yt_video_urls": [],
+            "yt_playlist_urls": [],
+            "spotify_urls": [],
+        }
+        found_url = False
+        for possible_url in args:
+            is_url = validators.url(possible_url)
+            found_url = found_url or is_url
+            if is_yt_video(possible_url):
+                kwargs["yt_video_urls"].append(possible_url)
+            elif is_yt_playlist(possible_url):
+                kwargs["yt_playlist_urls"].append(possible_url)
+            elif is_spotify_url(possible_url):
+                kwargs["spotify_urls"].append(possible_url)
+            elif validators.url(possible_url):
+                await ctx.send(f"Argument {possible_url} is structured like a url but is not a valid YouTube or Spotify url.")
+        if not found_url:
+            kwargs["yt_search_query"] = " ".join(args)
+        return kwargs
+
     @commands.command(name='play')
     async def play(self, ctx: commands.Context, *args):
         """Plays a song.
@@ -191,18 +239,16 @@ class MusicCog(commands.Cog):
         other songs finished playing.
         """
 
-        # TODO: music lags really bad whenever i download another song in the background
-        # TODO: sometimes the bot just doesn't download the song
-        if not args:
-            raise commands.CommandError("No arguments provided. Please provide a url or search query.")
-
+        kwargs = await self.parse_play_args(ctx, args)
         async with ctx.typing():
-            song_requests = self.song_factory.create_song_requests(ctx, args)
-            self.downloader.queue_downloads_if_necessary(song_requests)
+            print("getting songs")
+            song_requests = await self.song_factory.create_songs(ctx, **kwargs)
+            print("created songs")
             if not ctx.audio_player.voice_client:
+                print("joining voice channel")
                 await ctx.invoke(self.join)
             for request in song_requests:
-                await ctx.audio_player.request_queue.put(request)
+                await ctx.audio_player.song_queue.put(request)
                 await ctx.send(f"Enqueued {request}.")
 
     @join.before_invoke
@@ -215,27 +261,9 @@ class MusicCog(commands.Cog):
             if ctx.voice_client.channel != ctx.author.voice.channel:
                 raise commands.CommandError('Bot is already in a voice channel.')
     
-    # @commands.Cog.listener()
-    # async def on_audio_player_update(member, before, after):
-    # global curr_song_id, is_looping, song_queue
-    # if not member.id == bot.user.id:
-    #     return
-    # elif before.channel is None:
-    #     voice_client = after.channel.guild.voice_client
-    #     time = 0
-    #     while True:
-    #         await asyncio.sleep(1)
-    #         time += 1
-    #         if not voice_client.is_connected():
-    #             break
-    #         elif voice_client.is_playing() and not voice_client.is_paused() and after.channel.members.size >= 1:
-    #             time = 0
-    #         elif time == config.inactivity_timeout:
-    #             if voice_client.is_paused(): # If paused, completely stop
-    #                 curr_song_id = None
-    #                 is_looping = False
-    #                 song_queue.clear()
-    #                 voice_client.stop()
-    #             logging.debug("Bot disconnected due to inactivity.")
-    #             await voice_client.disconnect()
-    
+    @commands.Cog.listener()
+    async def on_voice_state_update(self, member, before, after):
+        if after.channel is None:
+            audio_player = self.get_audio_player(before.channel.guild.id)
+            if len(before.channel.voice_states) <= 1:
+                await audio_player.stop()

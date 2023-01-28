@@ -21,8 +21,3 @@ class Config():
         self.max_shown_songs = config_parser.getint("Parameters", "MaxShownSongs")
         self.spotify_song_limit = config_parser.getint("Parameters", "SpotifySongLimit")
         self.inactivity_timeout = config_parser.getint("Parameters", "InactivityTimeout")
-
-        self.music_path = config_parser.get("Paths", "MusicPath")
-        self.song_file = config_parser.get("Paths", "SongFile")
-        self.user_file = config_parser.get("Paths", "UserFile")
-        self.ffmpeg_path = config_parser.get("Paths", "FfmpegPath")
