@@ -1,14 +1,9 @@
-import atexit
 import asyncio
 from config.config import Config
 import discord
 from discord.ext import commands
 from music_bot.music_cog import MusicCog
 import os
-
-# @atexit.register
-# async def close_bot():
-#     await bot.close()
 
 # Run the bot
 if __name__ == "__main__":

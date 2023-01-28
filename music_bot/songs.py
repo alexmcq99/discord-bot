@@ -159,7 +159,11 @@ class SongFactory:
 
     async def create_songs_from_yt_video_urls(self, yt_video_urls: list[str]) -> list[Song]:
         tasks = [self.create_song_from_yt_video_url(yt_video_url) for yt_video_url in yt_video_urls]
-        return await asyncio.gather(*tasks, return_exceptions=True)
+        songs = await asyncio.gather(*tasks, return_exceptions=True)
+        for song in songs:
+            if not isinstance(song, Song):
+                print("NOT A SONG:", song)
+        return songs
     
     async def create_song_from_yt_video_url(self, yt_video_url: str) -> Song:
         yt_video = await YoutubeVideo.from_url(yt_video_url)

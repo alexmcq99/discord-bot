@@ -20,18 +20,22 @@ def url_to_id(url, ignore_playlist = True):
     # - http://www.youtube.com/watch?v=_oPAwA_Udwc&feature=feedu
     # - http://www.youtube.com/embed/SA2iWivDJiE
     # - http://www.youtube.com/v/SA2iWivDJiE?version=3&amp;hl=en_US
-    query = urlparse(url)
-    if query.hostname == 'youtu.be' and ignore_playlist: return query.path[1:]
-    if query.hostname in {'www.youtube.com', 'youtube.com', 'music.youtube.com', 'm.youtube.com'}:
-        if not ignore_playlist:
-        # use case: get playlist id not current video in playlist
-            with suppress(KeyError):
-                return parse_qs(query.query)['list'][0]
-            return None
-        if query.path == '/watch': return parse_qs(query.query)['v'][0]
-        if query.path[:7] == '/watch/': return query.path.split('/')[1]
-        if query.path[:7] == '/embed/': return query.path.split('/')[2]
-        if query.path[:3] == '/v/': return query.path.split('/')[2]
+    try:
+        query = urlparse(url)
+        if query.hostname == 'youtu.be' and ignore_playlist: return query.path[1:]
+        if query.hostname in {'www.youtube.com', 'youtube.com', 'music.youtube.com', 'm.youtube.com'}:
+            if not ignore_playlist:
+            # use case: get playlist id not current video in playlist
+                with suppress(KeyError):
+                    return parse_qs(query.query)['list'][0]
+                return None
+            if query.path == '/watch': return parse_qs(query.query)['v'][0]
+            if query.path[:7] == '/watch/': return query.path.split('/')[1]
+            if query.path[:7] == '/embed/': return query.path.split('/')[2]
+            if query.path[:3] == '/v/': return query.path.split('/')[2]
+    except Exception as e:
+        print("url to id")
+        traceback.print_exception(e)
     # returns None for invalid YouTube url
 
 def is_yt_video(url):
@@ -39,6 +43,11 @@ def is_yt_video(url):
 
 def is_yt_playlist(url):
     return url_to_id(url, ignore_playlist = False) is not None
+
+def parse_duration(duration: int):
+    minutes, seconds = divmod(duration, 60)
+    hours, minutes = divmod(minutes, 60)
+    return hours, minutes, seconds
     
 class YoutubePlaylist():
     def __init__(self, playlist_data: dict[str, Any]):
@@ -73,11 +82,15 @@ class YoutubeVideo():
         self.channel_url: str = video_data["channel"]["link"]
         self.thumbnail_url: str = video_data["thumbnails"][0]["url"]
 
-        time_units = video_data["duration"].split(":")
-        seconds = int(time_units[-1])
-        minutes = int(time_units[-2]) if len(time_units) > 1 else 0
-        hours = int(time_units[-3]) if len(time_units) > 2 else 0
-        self.duration: int = hours * 3600 + minutes * 60 + seconds
+        duration = video_data["duration"]
+        if isinstance(duration, str):
+            time_units = video_data["duration"].split(":")
+            seconds = int(time_units[-1])
+            minutes = int(time_units[-2]) if len(time_units) > 1 else 0
+            hours = int(time_units[-3]) if len(time_units) > 2 else 0
+            self.duration: int = hours * 3600 + minutes * 60 + seconds
+        else:
+            self.duration: int = int(duration["secondsText"])
         self.formatted_duration: str = f"{str(hours).zfill(2)}:{str(minutes).zfill(2)}:{str(seconds).zfill(2)}"
         
         target_streams = [stream for stream in video_data["streamingData"]["adaptiveFormats"] if stream["mimeType"] == self.__class__.TARGET_MIME_TYPE]
@@ -103,7 +116,7 @@ class YoutubeVideo():
     @classmethod
     async def from_url(cls, url: str):
         id = url_to_id(url)
-        return YoutubeVideo.from_id(id)
+        return await YoutubeVideo.from_id(id)
 
     @classmethod
     async def from_id(cls, id: str):
