@@ -1,21 +1,8 @@
-import json
+import aiocsv
+import aiofiles
+import csv
 
-# Read a json file to a dictionary
-# Return an empty dictionary if not found
-def read_json_file(file):
-    try:
-        with open(file) as f:
-            data = json.load(f)
-    except FileNotFoundError as e:
-        data = {}
-    except Exception as e:
-        print("Error reading json file")
-        # logging.debug("Unexpected error in reading file: " + str(e))
-    
-    return data
-
-# Write data back to disk as json file
-# Done when bot exits, data is stored in dictionaries while running
-def write_json_file(file, data):
-    with open(file, "w") as f:
-        json.dump(data, f, indent=4)
+async def write_to_csv(csv_file: str, row: list[str]):
+    async with aiofiles.open(csv_file, mode="a", encoding="utf-8", newline="") as f:
+        writer = aiocsv.AsyncWriter(f, quoting=csv.QUOTE_ALL)
+        await writer.writerow(row)

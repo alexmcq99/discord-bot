@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime
 from discord import VoiceClient
 from discord.ext.commands import Bot
 from .songs import Song, SongQueue
@@ -37,6 +38,7 @@ class AudioPlayer:
                     return
                 
                 print("about to play song")
+                self.current_song.timestamp_last_played = datetime.now()
                 self.voice_client.play(self.current_song.audio_source, after=self.play_next_song)
                 print(f"Sending embed")
                 await self.current_song.channel_where_requested.send(embed=self.current_song.create_embed())
@@ -55,6 +57,8 @@ class AudioPlayer:
             raise AudioError(str(error))
 
         print("Song is done, preparing to play next song.")
+        self.current_song.timestamp_last_stopped = datetime.now()
+        self.bot.loop.create_task(self.current_song.write_song_play())
         if self.is_looping:
             self.song_queue.put_nowait(self.current_song)
         self.current_song = None

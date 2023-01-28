@@ -1,5 +1,6 @@
-from config.config import Config
 import asyncio
+from config.config import Config
+from datetime import datetime
 import discord
 from discord.abc import GuildChannel
 from discord.ext.commands import Context
@@ -8,6 +9,7 @@ import random
 from .spotify import SpotifyClientWrapper
 import traceback
 from typing import Any
+from utils import write_to_csv
 from .youtube import YoutubePlaylist, YoutubeVideo
 
 class Song:
@@ -16,14 +18,38 @@ class Song:
         'options': '-vn',
     }
 
-    def __init__(self, yt_video: YoutubeVideo, requester: discord.Member, channel: GuildChannel) -> None:
+    def __init__(self, config: Config, yt_video: YoutubeVideo, requester: discord.Member, channel: GuildChannel) -> None:
+        self.config: Config = config
         self.yt_video: YoutubeVideo = yt_video
         self.requester: discord.Member = requester
         self.channel_where_requested: GuildChannel = channel
+        self.timestamp_requested: datetime = datetime.now()
+        self.timestamp_last_played: datetime = None
+        self.timestamp_last_stopped: datetime = None
 
     @property
     def audio_source(self) -> discord.FFmpegOpusAudio:
         return discord.FFmpegOpusAudio(source=self.stream_url, **Song.FFMPEG_OPTIONS)
+    
+    @property
+    def duration_last_played(self) -> int:
+        if not self.timestamp_last_played:
+            return 0
+        end_timestamp = self.timestamp_last_stopped or datetime.now()
+        duration = end_timestamp - self.duration_last_played
+        return duration.seconds
+    
+    @property
+    def song_csv_row(self) -> list[str]:
+        return [self.video_id, self.title, self.channel_name, self.duration]
+
+    @property
+    def request_csv_row(self) -> list[str]:
+        return [str(self.requester.id), self.video_id, str(self.timestamp_requested)]
+    
+    @property
+    def play_csv_row(self) -> list[str]:
+        return [str(self.requester.id), self.video_id, str(self.timestamp_last_played), str(self.duration_last_played)]
     
     def create_embed(self) -> discord.Embed:
         return (discord.Embed(title="Current song:",
@@ -34,6 +60,15 @@ class Song:
                 .add_field(name="Requested by", value=self.requester.mention)
                 .add_field(name="Uploader", value=f"[{self.channel_name}]({self.channel_url})")
                 .set_thumbnail(url=self.thumbnail_url))
+    
+    async def write_song(self):
+        await write_to_csv(self.config.songs_file_path, self.song_csv_row)
+
+    async def write_song_request(self) -> None:
+        await write_to_csv(self.config.song_requests_file_path, self.request_csv_row)
+    
+    async def write_song_play(self) -> None:
+        await write_to_csv(self.config.song_plays_file_path, self.play_csv_row)
 
     def __str__(self):
         return f":notes: **{self.title}** :notes: by **{self.channel_name}**"
@@ -98,7 +133,7 @@ class SongFactory:
     
     async def create_songs_from_yt_playlist_url(self, yt_playlist_url: str) -> list[Song]:
         yt_playlist = await YoutubePlaylist.from_url(yt_playlist_url)
-        return [self.create_song(yt_video) for yt_video in yt_playlist.videos]
+        return [await self.create_song(yt_video) for yt_video in yt_playlist.videos]
 
     async def create_songs_from_spotify_urls(self, spotify_urls: list[str]) -> list[Song]:
         tasks = [self.create_songs_from_spotify_url(spotify_url) for spotify_url in spotify_urls]
@@ -120,19 +155,22 @@ class SongFactory:
         yt_video = await YoutubeVideo.from_search_query(yt_search_query)
         if yt_search_query and not yt_video:
             await self.ctx.send(f"Youtube search \"{yt_search_query}\" did not yield any results.")
-        return self.create_song(yt_video)
+        return await self.create_song(yt_video)
 
     async def create_songs_from_yt_video_urls(self, yt_video_urls: list[str]) -> list[Song]:
-        tasks = [self.create_songs_from_yt_video_url(yt_video_url) for yt_video_url in yt_video_urls]
+        tasks = [self.create_song_from_yt_video_url(yt_video_url) for yt_video_url in yt_video_urls]
         return await asyncio.gather(*tasks, return_exceptions=True)
     
-    async def create_songs_from_yt_video_url(self, yt_video_url: str) -> Song:
+    async def create_song_from_yt_video_url(self, yt_video_url: str) -> Song:
         yt_video = await YoutubeVideo.from_url(yt_video_url)
         if not yt_video:
             await self.ctx.send(f"Youtube video at \"{yt_video_url}\" is not available.")
-        return self.create_song(yt_video)
-    
-    def create_song(self, yt_video: YoutubeVideo) -> Song:
+        return await self.create_song(yt_video)
+
+    async def create_song(self, yt_video: YoutubeVideo) -> Song:
         if not yt_video:
             return None
-        return Song(yt_video, self.ctx.message.author, self.ctx.channel)
+        song = Song(yt_video, self.ctx.message.author, self.ctx.channel)
+        await song.write_song()
+        await song.write_song_request()
+        return song
