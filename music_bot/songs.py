@@ -29,7 +29,7 @@ class Song:
 
     @property
     def audio_source(self) -> discord.FFmpegOpusAudio:
-        return discord.FFmpegOpusAudio(source=self.stream_url, **Song.FFMPEG_OPTIONS)
+        return discord.FFmpegOpusAudio(source=self.stream_url, **self.FFMPEG_OPTIONS)
     
     @property
     def duration_last_played(self) -> int:
