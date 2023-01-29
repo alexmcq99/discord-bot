@@ -9,7 +9,6 @@ import random
 from .spotify import SpotifyClientWrapper
 import traceback
 from typing import Any
-from utils import write_to_csv
 from .youtube import YoutubePlaylist, YoutubeVideo
 
 class Song:
@@ -39,17 +38,17 @@ class Song:
         duration = end_timestamp - self.duration_last_played
         return duration.seconds
     
-    @property
-    def song_csv_row(self) -> list[str]:
-        return [self.video_id, self.title, self.channel_name, self.duration]
+    # @property
+    # def song_csv_row(self) -> list[str]:
+    #     return [self.video_id, self.title, self.channel_name, self.duration]
 
-    @property
-    def request_csv_row(self) -> list[str]:
-        return [str(self.requester.id), self.video_id, str(self.timestamp_requested)]
+    # @property
+    # def request_csv_row(self) -> list[str]:
+    #     return [str(self.requester.id), self.video_id, str(self.timestamp_requested)]
     
-    @property
-    def play_csv_row(self) -> list[str]:
-        return [str(self.requester.id), self.video_id, str(self.timestamp_last_played), str(self.duration_last_played)]
+    # @property
+    # def play_csv_row(self) -> list[str]:
+    #     return [str(self.requester.id), self.video_id, str(self.timestamp_last_played), str(self.duration_last_played)]
     
     def create_embed(self) -> discord.Embed:
         return (discord.Embed(title="Current song:",
@@ -61,14 +60,14 @@ class Song:
                 .add_field(name="Uploader", value=f"[{self.channel_name}]({self.channel_url})")
                 .set_thumbnail(url=self.thumbnail_url))
     
-    async def write_song(self):
-        await write_to_csv(self.config.songs_file_path, self.song_csv_row)
+    # async def write_song(self):
+    #     await write_to_csv(self.config.songs_file_path, self.song_csv_row)
 
-    async def write_song_request(self) -> None:
-        await write_to_csv(self.config.song_requests_file_path, self.request_csv_row)
+    # async def write_song_request(self) -> None:
+    #     await write_to_csv(self.config.song_requests_file_path, self.request_csv_row)
     
-    async def write_song_play(self) -> None:
-        await write_to_csv(self.config.song_plays_file_path, self.play_csv_row)
+    # async def write_song_play(self) -> None:
+    #     await write_to_csv(self.config.song_plays_file_path, self.play_csv_row)
 
     def __str__(self):
         return f":notes: **{self.title}** :notes: by **{self.channel_name}**"
@@ -175,6 +174,6 @@ class SongFactory:
         if not yt_video:
             return None
         song = Song(yt_video, self.ctx.message.author, self.ctx.channel)
-        await song.write_song()
-        await song.write_song_request()
+        # await song.write_song()
+        # await song.write_song_request()
         return song
