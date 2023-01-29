@@ -31,22 +31,28 @@ class MusicDatabase():
     
     def __init__(self, config: Config):
         self.database_file_path: str = config.database_file_path
-        self.table_names: list[str] = ["songs", "song_requests", "song_plays"]
+        table_names = ["songs", "song_requests", "song_plays"]
+        self.drop_table_statements: list[str] = [self.DROP_TABLE_SQL.format(table_name) for table_name in table_names]
+        self.create_table_statements: list[str] = [self.CREATE_SONGS_SQL, self.CREATE_SONG_REQUESTS_SQL, self.CREATE_SONG_PLAYS_SQL]
 
-    async def create_tables(self, drop_tables: bool = False):
+    async def create_tables(self, drop_tables: bool) -> None:
         async with aiosqlite.connect(self.database_file_path) as conn:
             if drop_tables:
                 print("Dropping tables")
-                drop_statements = [self.DROP_TABLE_SQL.format(table_name) for table_name in self.table_names]
-                try:
-                    for drop_statement in drop_statements:
-                        await conn.execute(drop_statement)
-                except aiosqlite.Error as e:
-                    print("Error in Table Drops: " + str(e))
+                await self.execute_sql_statements(conn, self.drop_table_statements)
 
-            try:
-                await conn.execute(self.CREATE_SONGS_SQL)
-                await conn.execute(self.CREATE_SONG_REQUESTS_SQL)
-                await conn.execute(self.CREATE_SONG_PLAYS_SQL)
-            except aiosqlite.Error as e:
-                print("Error in Table Creation: " + str(e))
+            await self.execute_sql_statements(conn, self.create_table_statements)
+    
+    async def insert_song(self, song: tuple[str, str, str, int]) -> None:
+        async with aiosqlite.connect(self.database_file_path) as conn:
+            pass
+    
+    async def execute_sql_statements(self, conn: aiosqlite.Connection, sql_statements: list[str]) -> None:
+        for sql_statement in sql_statements:
+            await self.execute_sql_statement(sql_statement)
+
+    async def execute_sql_statement(self, conn: aiosqlite.Connection, sql_statement: str) -> None:
+        try:
+            await conn.execute(sql_statement)
+        except aiosqlite.Error as e:
+            print(f"Error in SQL statement {sql_statement}: " + str(e))
