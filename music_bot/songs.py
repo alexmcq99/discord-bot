@@ -75,6 +75,7 @@ class Song:
     def __getattr__(self, __name) -> Any:
         return getattr(self.yt_video, __name)
 
+# TODO: add discord embed of queue to object, maybe with page argument
 class SongQueue(asyncio.Queue):
     def __getitem__(self, item):
         if isinstance(item, slice):
@@ -105,7 +106,7 @@ class SongFactory:
         self.config: Config = config
         self.ctx: Context = None
         self.spotify_client_wrapper = SpotifyClientWrapper(config)
-    
+        
     async def create_songs(
             self, ctx: Context, *,
             yt_search_query: str = None,

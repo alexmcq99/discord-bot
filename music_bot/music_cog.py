@@ -252,16 +252,16 @@ class MusicCog(commands.Cog):
         kwargs = await self.parse_play_args(ctx, args)
         async with ctx.typing():
             print("getting songs")
-            song_requests = await self.song_factory.create_songs(ctx, **kwargs)
+            songs = await self.song_factory.create_songs(ctx, **kwargs)
             print("created songs")
             if not ctx.audio_player.voice_client:
                 print("joining voice channel")
                 await ctx.invoke(self.join)
             if not ctx.audio_player.audio_player or ctx.audio_player.audio_player.done():
                 ctx.audio_player.start_audio_player()
-            for request in song_requests:
-                await ctx.audio_player.song_queue.put(request)
-                await ctx.send(f"Enqueued {request}.")
+            for song in songs:
+                await ctx.audio_player.song_queue.put(song)
+                await ctx.send(f"Enqueued {song}.")
 
     @join.before_invoke
     @play.before_invoke
