@@ -173,7 +173,7 @@ class SongFactory:
     async def create_song(self, yt_video: YoutubeVideo) -> Song:
         if not yt_video:
             return None
-        song = Song(yt_video, self.ctx.message.author, self.ctx.channel)
+        song = Song(self.config, yt_video, self.ctx.message.author, self.ctx.channel)
         # await song.write_song()
         # await song.write_song_request()
         return song

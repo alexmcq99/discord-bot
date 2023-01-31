@@ -58,7 +58,7 @@ class AudioPlayer:
 
         print("Song is done, preparing to play next song.")
         self.current_song.timestamp_last_stopped = datetime.now()
-        self.bot.loop.create_task(self.current_song.write_song_play())
+        # self.bot.loop.create_task(self.current_song.write_song_play())
         if self.is_looping:
             self.song_queue.put_nowait(self.current_song)
         self.current_song = None
