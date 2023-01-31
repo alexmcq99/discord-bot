@@ -2,9 +2,11 @@ import asyncio
 from config.config import Config
 from datetime import datetime
 import discord
-from discord.abc import GuildChannel
+from discord.abc import Guild, GuildChannel
 from discord.ext.commands import Context
 import itertools
+import math
+import music_database
 import random
 from .spotify import SpotifyClientWrapper
 import traceback
@@ -17,11 +19,12 @@ class Song:
         'options': '-vn',
     }
 
-    def __init__(self, config: Config, yt_video: YoutubeVideo, requester: discord.Member, channel: GuildChannel) -> None:
+    def __init__(self, config: Config, yt_video: YoutubeVideo, ctx: Context) -> None:
         self.config: Config = config
         self.yt_video: YoutubeVideo = yt_video
-        self.requester: discord.Member = requester
-        self.channel_where_requested: GuildChannel = channel
+        self.guild: Guild = ctx.guild
+        self.requester: discord.Member = ctx.author
+        self.channel_where_requested: GuildChannel = ctx.channel
         self.timestamp_requested: datetime = datetime.now()
         self.timestamp_last_played: datetime = None
         self.timestamp_last_stopped: datetime = None
@@ -37,18 +40,23 @@ class Song:
         end_timestamp = self.timestamp_last_stopped or datetime.now()
         duration = end_timestamp - self.duration_last_played
         return duration.seconds
-    
-    # @property
-    # def song_csv_row(self) -> list[str]:
-    #     return [self.video_id, self.title, self.channel_name, self.duration]
 
-    # @property
-    # def request_csv_row(self) -> list[str]:
-    #     return [str(self.requester.id), self.video_id, str(self.timestamp_requested)]
+    @property
+    def song_request(self) -> music_database.SongRequest:
+        return music_database.SongRequest(
+            timestamp=self.timestamp_requested,
+            guild_id=self.guild.id,
+            requester_id=self.requester.id,
+            song_id=self.video_id)
     
-    # @property
-    # def play_csv_row(self) -> list[str]:
-    #     return [str(self.requester.id), self.video_id, str(self.timestamp_last_played), str(self.duration_last_played)]
+    @property
+    def song_play(self) -> music_database.SongPlay:
+        return music_database.SongPlay(
+            timestamp=self.timestamp_requested,
+            guild_id=self.guild.id,
+            requester_id=self.requester.id,
+            song_id=self.video_id,
+            duration=self.duration_last_played)
     
     def create_embed(self) -> discord.Embed:
         return (discord.Embed(title="Current song:",
@@ -59,15 +67,6 @@ class Song:
                 .add_field(name="Requested by", value=self.requester.mention)
                 .add_field(name="Uploader", value=f"[{self.channel_name}]({self.channel_url})")
                 .set_thumbnail(url=self.thumbnail_url))
-    
-    # async def write_song(self):
-    #     await write_to_csv(self.config.songs_file_path, self.song_csv_row)
-
-    # async def write_song_request(self) -> None:
-    #     await write_to_csv(self.config.song_requests_file_path, self.request_csv_row)
-    
-    # async def write_song_play(self) -> None:
-    #     await write_to_csv(self.config.song_plays_file_path, self.play_csv_row)
 
     def __str__(self):
         return f":notes: **{self.title}** :notes: by **{self.channel_name}**"
@@ -77,6 +76,27 @@ class Song:
 
 # TODO: add discord embed of queue to object, maybe with page argument
 class SongQueue(asyncio.Queue):
+    def __init__(self, max_shown_songs: int):
+        self.max_shown_songs: int = max_shown_songs
+        super().__init__()
+    
+    def create_embed(self, page: int) -> discord.Embed:
+        pages = math.ceil(len(self._queue) / self.max_shown_songs)
+
+        start = (page - 1) * self.max_shown_songs
+        end = start + self.max_shown_songs
+
+        queue_str = ""
+        for i, song in enumerate(self._queue[start:end], start=start):
+            queue_str += f"`{i + 1}.`  [**{song.title}**]({song.video_url})\n"
+
+        embed_title = f"**Song queue has {len(self._queue)} track{'s' if len(self._queue) > 1 else ''}**:"
+        embed = (discord.Embed(title=embed_title,
+                description=queue_str,
+                color=discord.Color.random()
+                ).set_footer(text=f"Viewing page {page}/{pages}"))
+        return embed
+    
     def __getitem__(self, item):
         if isinstance(item, slice):
             return list(itertools.islice(self._queue, item.start, item.stop, item.step))
@@ -102,8 +122,9 @@ class SongQueue(asyncio.Queue):
         del self._queue[index]
 
 class SongFactory:
-    def __init__(self, config: Config) -> None:
+    def __init__(self, config: Config, music_db: music_database.MusicDatabase) -> None:
         self.config: Config = config
+        self.music_db: music_database.MusicDatabase = music_db
         self.ctx: Context = None
         self.spotify_client_wrapper = SpotifyClientWrapper(config)
         
@@ -174,6 +195,6 @@ class SongFactory:
     async def create_song(self, yt_video: YoutubeVideo) -> Song:
         if not yt_video:
             return None
-        song = Song(yt_video, self.ctx.message.author, self.ctx.channel)
-        # await song.write_song_request()
+        song = Song(self.config, yt_video, self.ctx)
+        await self.music_db.insert_data(song.song_request)
         return song

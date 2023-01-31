@@ -1,7 +1,9 @@
 import asyncio
+from config.config import Config
 from datetime import datetime
 from discord import VoiceClient
 from discord.ext.commands import Bot
+from .music_database import MusicDatabase
 from .songs import Song, SongQueue
 import traceback
 
@@ -9,12 +11,13 @@ class AudioError(Exception):
     pass
 
 class AudioPlayer:
-    def __init__(self, bot: Bot, inactivity_timeout: int):
+    def __init__(self, config: Config, bot: Bot, music_db: MusicDatabase, inactivity_timeout: int):
         self.bot: Bot = bot
+        self.music_db: MusicDatabase = music_db
         self.inactivity_timeout: int = inactivity_timeout
         self.current_song: Song = None
         self.voice_client: VoiceClient = None
-        self.song_queue: SongQueue[Song] = SongQueue()
+        self.song_queue: SongQueue[Song] = SongQueue(config.max_shown_songs)
         self.is_looping: bool = False
         self.play_next_song_event: asyncio.Event = asyncio.Event()
         self.audio_player: asyncio.Task = None
@@ -61,7 +64,7 @@ class AudioPlayer:
 
         print("Song is done, preparing to play next song.")
         self.current_song.timestamp_last_stopped = datetime.now()
-        # self.bot.loop.create_task(self.current_song.write_song_play())
+        self.bot.loop.create_task(self.music_db.insert_data(self.current_song.song_play))
         if self.is_looping:
             self.song_queue.put_nowait(self.current_song)
         self.current_song = None
@@ -70,10 +73,6 @@ class AudioPlayer:
     def skip(self):
         if self.voice_client.is_playing():
             self.voice_client.stop()
-        elif self.current_song.download_future:
-            self.current_song.download_future.cancel()
-        else:
-            raise AudioError("Uh oh, this shouldn't be possible.")
 
     async def stop(self):
         self.song_queue.clear()

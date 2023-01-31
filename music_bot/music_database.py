@@ -85,7 +85,7 @@ class MusicDatabase():
     # Stats class also creates graphs, which can be embedded
     # add argument parsing logic to stats command in MusicCog to get stats for song, user, or everything
     # may share logic with already existing argument parsing logic for the play command, reuse code as necessary
-    async def get_song_requests(self, guild_id: int, requester_id: int = None, song_id: str = None):
+    async def get_song_requests(self, guild_id: int, requester_id: int = None, song_id: str = None) -> list[SongRequest]:
         async with self.async_session() as session:
             query = select(SongRequest).where(SongRequest.guild_id == guild_id)
             if requester_id:
@@ -96,7 +96,7 @@ class MusicDatabase():
             song_requests = result.scalars()
             return song_requests
     
-    async def get_song_plays(self, guild_id: int, requester_id: int = None, song_id: str = None):
+    async def get_song_plays(self, guild_id: int, requester_id: int = None, song_id: str = None) -> list[SongPlay]:
         async with self.async_session() as session:
             query = select(SongPlay).where(SongPlay.guild_id == guild_id)
             if requester_id:

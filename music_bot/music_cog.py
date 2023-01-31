@@ -2,9 +2,11 @@ from .audio_player import AudioPlayer
 from config.config import Config
 import discord
 from discord.ext import commands
-import math
+from .music_database import MusicDatabase
+import re
 from .songs import SongFactory
 from .spotify import is_spotify_url
+from .stats import StatsFactory
 import traceback
 import validators
 from .youtube import is_yt_playlist, is_yt_video
@@ -13,7 +15,9 @@ class MusicCog(commands.Cog):
     def __init__(self, bot: commands.Bot, config: Config):
         self.bot: commands.Bot = bot
         self.config: Config = config
-        self.song_factory: SongFactory = SongFactory(config)
+        self.music_db: MusicDatabase = MusicDatabase(config)
+        self.song_factory: SongFactory = SongFactory(config, self.music_db)
+        self.stats_factory: StatsFactory = StatsFactory(self.music_db)
         self.audio_players: dict[int, AudioPlayer] = dict()
         self.default_reaction: str = "✅"
         self.reactions: dict[str, str] = {
@@ -37,13 +41,13 @@ class MusicCog(commands.Cog):
         if audio_player:
             print("Retrieved audio manager")
         if not audio_player:
-            audio_player = AudioPlayer(self.bot, self.config.inactivity_timeout)
+            audio_player = AudioPlayer(self.bot, self.music_db, self.config.inactivity_timeout)
             self.audio_players[guild_id] = audio_player
             print(f"Stored audio manager: {audio_player}")
         return audio_player
     
     async def cog_load(self):
-        # await self.song_factory.load_downloaded_songs()
+        await self.music_db.initialize()
         print("booting up")
 
     def cog_unload(self):
@@ -171,22 +175,7 @@ class MusicCog(commands.Cog):
         if not ctx.audio_player.song_queue:
             return await ctx.send('Empty queue.')
 
-        pages = math.ceil(len(ctx.audio_player.song_queue) / self.config.max_shown_songs)
-
-        start = (page - 1) * self.config.max_shown_songs
-        end = start + self.config.max_shown_songs
-
-        queue_str = ""
-        for i, song in enumerate(ctx.audio_player.song_queue[start:end], start=start):
-            queue_str += f"`{i + 1}.`  [**{song.title}**]({song.video_url})\n"
-
-        embed_title = f"**Song queue has {len(ctx.audio_player.song_queue)} track{'s' if len(ctx.audio_player.song_queue) > 1 else ''}**:"
-        embed = (discord.Embed(title=embed_title,
-                description=queue_str,
-                color=discord.Color.random()
-                )
-                .set_footer(text=f"Viewing page {page}/{pages}"))
-        await ctx.send(embed=embed)
+        await ctx.send(embed=ctx.audio_player.song_queue.create_embed(page))
 
     @commands.command(name='shuffle')
     async def shuffle(self, ctx: commands.Context):
@@ -196,6 +185,36 @@ class MusicCog(commands.Cog):
             return await ctx.send('Empty queue.')
 
         ctx.audio_player.song_queue.shuffle()
+
+    def parse_stats_args(self, ctx: commands.Context, args: tuple[str]):
+        if not args:
+            raise commands.UserInputError("No arguments provided. Please provide a url or search query.")
+        
+        kwargs = dict()
+        possible_url = args[0]
+        if is_yt_video(possible_url):
+            kwargs["yt_video_url"] = possible_url
+        elif validators.url(possible_url):
+            raise commands.UserInputError(f"Argument {possible_url} is structured like a url but is not a valid YouTube url.")
+            # TODO: get user object from mention string, maybe it has id in it?
+        else:
+            possible_user_mention = args[0]
+            pattern = "<|@|>"
+            user_id = re.sub(pattern, "", possible_user_mention)
+            user = ctx.guild.get_member(user_id)
+            if user:
+                kwargs["user"] = user
+            else:
+                kwargs["yt_search_query"] = " ".join(args)
+        return kwargs
+
+    @commands.command(name='stats')
+    async def stats(self, ctx: commands.Context, *args):
+        """Gets stats on a song, user, or server"""
+
+        kwargs = self.parse_stats_args(ctx, args)
+        stats = self.stats_factory.create_stats(ctx, kwargs)
+        await ctx.send(embed=stats.create_main_embed())
 
     @commands.command(name='remove')
     async def remove(self, ctx: commands.Context, index: int):
