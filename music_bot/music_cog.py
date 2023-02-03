@@ -78,6 +78,16 @@ class MusicCog(commands.Cog):
             await ctx.send(f"An error occurred in {ctx.command.name}: {str(error)}")
         traceback.print_exception(error)
     
+    @commands.command(name='clear')
+    async def clear(self, ctx: commands.Context):
+        """Clears the song queue."""
+
+        if not ctx.audio_player.song_queue:
+            await ctx.send("The queue is already empty.")
+        else:
+            ctx.audio_player.song_queue.clear()
+            await ctx.send("Cleared the queue.")
+
     @commands.command(name='join', aliases=['summon'], invoke_without_subcommand=True)
     async def join(self, ctx: commands.Context):
         """Joins a voice channel."""
@@ -247,6 +257,8 @@ class MusicCog(commands.Cog):
             if not ctx.audio_player.voice_client:
                 print("joining voice channel")
                 await ctx.invoke(self.join)
+            if not ctx.audio_player.audio_player or ctx.audio_player.audio_player.done():
+                ctx.audio_player.start_audio_player()
             for request in song_requests:
                 await ctx.audio_player.song_queue.put(request)
                 await ctx.send(f"Enqueued {request}.")

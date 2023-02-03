@@ -91,6 +91,8 @@ class YoutubeVideo():
             self.duration: int = hours * 3600 + minutes * 60 + seconds
         else:
             self.duration: int = int(duration["secondsText"])
+            minutes, seconds = divmod(self.duration, 60)
+            hours, minutes = divmod(minutes, 60)
         self.formatted_duration: str = f"{str(hours).zfill(2)}:{str(minutes).zfill(2)}:{str(seconds).zfill(2)}"
         
         target_streams = [stream for stream in video_data["streamingData"]["adaptiveFormats"] if stream["mimeType"] == self.__class__.TARGET_MIME_TYPE]
