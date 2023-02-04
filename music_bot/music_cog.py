@@ -193,11 +193,24 @@ class MusicCog(commands.Cog):
 
         ctx.audio_player.song_queue.shuffle()
 
+    async def get_yt_url(self, ctx: commands.Context, possible_url: str):
+        if is_yt_video(possible_url):
+            return possible_url
+        elif validators.url(possible_url):
+            await ctx.send(f"Argument {possible_url} is structured like a url but is not a valid YouTube url.")
+
     # TODO: Replace parsing helper methods with Converters
     async def parse_stats_args(self, ctx: commands.Context, args: tuple[str]):
         if not args:
             raise commands.UserInputError("No arguments provided. Please provide a url or search query.")
         
+        possible_user_mention = args[0]
+        pattern = r"<|@|>"
+        user_id = re.sub(pattern, "", possible_user_mention)
+        user = ctx.guild.get_member(user_id)
+        if user:
+            kwargs["user"] = self.get_yt_url(args[1])
+
         kwargs = dict()
         for arg in args:
             if "yt_video_url" not in kwargs:
