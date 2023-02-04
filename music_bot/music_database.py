@@ -4,7 +4,7 @@ from datetime import datetime
 
 from typing import Optional
 from sqlalchemy import ForeignKey
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.orm import declarative_base
@@ -75,6 +75,8 @@ class MusicDatabase():
             if song_id:
                 query = query.where(SongRequest.song_id == song_id)
             result = await session.execute(query)
+
+            session.query
             song_requests = result.scalars()
             return song_requests
     
