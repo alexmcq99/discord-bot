@@ -92,6 +92,13 @@ class MusicCog(commands.Cog):
             ctx.audio_player.song_queue.clear()
             await ctx.send("Cleared the queue.")
 
+    @commands.Cog.listener()
+    async def on_voice_state_update(self, member, before, after):
+        if after.channel is None:
+            audio_player = self.get_audio_player(before.channel.guild.id)
+            if len(before.channel.voice_states) <= 1:
+                await audio_player.stop()
+    
     @commands.command(name='join', aliases=['summon'], invoke_without_subcommand=True)
     async def join(self, ctx: commands.Context):
         """Joins a voice channel."""
@@ -186,26 +193,28 @@ class MusicCog(commands.Cog):
 
         ctx.audio_player.song_queue.shuffle()
 
-    def parse_stats_args(self, ctx: commands.Context, args: tuple[str]):
+    # TODO: Replace parsing helper methods with Converters
+    async def parse_stats_args(self, ctx: commands.Context, args: tuple[str]):
         if not args:
             raise commands.UserInputError("No arguments provided. Please provide a url or search query.")
         
         kwargs = dict()
-        possible_url = args[0]
-        if is_yt_video(possible_url):
-            kwargs["yt_video_url"] = possible_url
-        elif validators.url(possible_url):
-            raise commands.UserInputError(f"Argument {possible_url} is structured like a url but is not a valid YouTube url.")
-            # TODO: get user object from mention string, maybe it has id in it?
+        for arg in args:
+            if "yt_video_url" not in kwargs:
+                possible_url = arg
+                if is_yt_video(possible_url):
+                    kwargs["yt_video_url"] = possible_url
+                elif validators.url(possible_url):
+                    await ctx.send(f"Argument {possible_url} is structured like a url but is not a valid YouTube url.")
+            elif "user" not in kwargs:
+                possible_user_mention = arg
+                pattern = r"<|@|>"
+                user_id = re.sub(pattern, "", possible_user_mention)
+                user = ctx.guild.get_member(user_id)
+                if user:
+                    kwargs["user"] = user
         else:
-            possible_user_mention = args[0]
-            pattern = "<|@|>"
-            user_id = re.sub(pattern, "", possible_user_mention)
-            user = ctx.guild.get_member(user_id)
-            if user:
-                kwargs["user"] = user
-            else:
-                kwargs["yt_search_query"] = " ".join(args)
+                    kwargs["yt_search_query"] = " ".join(args)
         return kwargs
 
     @commands.command(name='stats')
@@ -291,10 +300,3 @@ class MusicCog(commands.Cog):
         if ctx.voice_client:
             if ctx.voice_client.channel != ctx.author.voice.channel:
                 raise commands.CommandError('Bot is already in a voice channel.')
-    
-    @commands.Cog.listener()
-    async def on_voice_state_update(self, member, before, after):
-        if after.channel is None:
-            audio_player = self.get_audio_player(before.channel.guild.id)
-            if len(before.channel.voice_states) <= 1:
-                await audio_player.stop()

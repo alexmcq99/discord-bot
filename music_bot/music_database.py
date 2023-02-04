@@ -39,24 +39,6 @@ class SongPlay(Base):
         return f"User(id={self.timestamp!r}, guild_id={self.guild_id!r}, requester_id={self.requester_id!r}, song_id={self.song_id!r}, duration={self.duration!r})"
 
 class MusicDatabase():
-    DROP_TABLE_SQL = "drop table if exists {0};"
-    CREATE_SONGS_SQL = """create table if not exists songs(
-        id text not null primary key,
-        title text not null,
-        channel_name text not null,
-        duration int not null);"""
-    CREATE_SONG_REQUESTS_SQL = """create table if not exists song_requests(
-        requester_id integer not null,
-        song_id text not null,
-        timestamp text not null,
-        foreign key(song_id) references songs(id));"""
-    CREATE_SONG_PLAYS_SQL = """create table if not exists song_plays(
-        requester_id integer not null,
-        song_id text not null,
-        timestamp text not null,
-        duration int not null,
-        foreign key(song_id) references songs(id));"""
-    
     def __init__(self, config: Config):
         self.reset_database: bool = config.reset_database
         connection_string = f"sqlite+aiosqlite:///{config.database_file_path}"
