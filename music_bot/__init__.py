@@ -1,1 +1,1 @@
-# from .songs import *
+from .music_cog import MusicCog

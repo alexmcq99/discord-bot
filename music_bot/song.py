@@ -6,7 +6,7 @@ from discord.abc import Messageable
 from discord.ext.commands import Context
 import itertools
 import math
-from .tables import SongPlay, SongRequest
+from .usage_tables import SongPlay, SongRequest
 import random
 from typing import Any
 from .youtube import YoutubeVideo
