@@ -3,7 +3,7 @@ from dotenv import load_dotenv
 import os
 
 class Config():
-    DATABASE_FILE_NAME = "music_data.db"
+    DATABASE_FILE_NAME = "usage.db"
 
     def __init__(self, file):
         # Get api tokens from .env

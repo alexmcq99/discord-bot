@@ -1,5 +1,3 @@
-
-
 def parse_time_str(time_str: str):
     time_units = time_str.split(":")
     seconds = int(time_units[-1])

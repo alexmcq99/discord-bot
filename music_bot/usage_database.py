@@ -1,43 +1,16 @@
-from config.config import Config
-from datetime import datetime
+from config import Config
+
+from .song import Song
+from .tables import Base, SongRequest, SongPlay
 
 from typing import Any, Optional
-from sqlalchemy import ForeignKey
-from sqlalchemy import asc
+from sqlalchemy import asc, select
 from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.ext.asyncio import create_async_engine
-from sqlalchemy.orm import declarative_base
-from sqlalchemy.orm import Mapped
-from sqlalchemy.orm import mapped_column
 from sqlalchemy.orm import sessionmaker
 
-Base = declarative_base()
-
-class SongRequest(Base):
-    __tablename__ = "song_request"
-
-    timestamp: Mapped[datetime]
-    guild_id: Mapped[int]
-    requester_id: Mapped[int]
-    song_id: Mapped[str] = mapped_column(ForeignKey("song.id"))
-
-    def __repr__(self) -> str:
-        return f"User(id={self.timestamp!r}, guild_id={self.guild_id!r}, requester_id={self.requester_id!r}, song_id={self.song_id!r})"
-
-class SongPlay(Base):
-    __tablename__ = "song_play"
-
-    timestamp: Mapped[datetime]
-    guild_id: Mapped[int]
-    requester_id: Mapped[int]
-    song_id: Mapped[str] = mapped_column(ForeignKey("song.id"))
-    duration: Mapped[int]
-
-    def __repr__(self) -> str:
-        return f"User(id={self.timestamp!r}, guild_id={self.guild_id!r}, requester_id={self.requester_id!r}, song_id={self.song_id!r}, duration={self.duration!r})"
-
-class MusicDatabase():
+class UsageDatabase():
     def __init__(self, config: Config):
         self.reset_database: bool = config.reset_database
         connection_string = f"sqlite+aiosqlite:///{config.database_file_path}"
@@ -50,8 +23,20 @@ class MusicDatabase():
         if self.reset_database:
             async with self.engine.begin() as conn:
                 await conn.run_sync(Base.metadata.drop_all)
+
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
+
+        # TODO: replace all session.query syntax with syntax similar to this, using session.execute(), along with the select() function
+        async with self.async_session() as session:
+            max_request_id_result = await session.execute(select(func.max(SongRequest.id)))
+            max_play_id_result = await session.execute(select(func.max(SongPlay.id)))
+            max_request_id = max_request_id_result.scalar()
+            max_play_id = max_play_id_result.scalar()
+            if max_request_id:
+                Song.request_id_counter = max_request_id.scalar() + 1
+            if max_play_id:
+                Song.play_id_counter = max_play_id.scalar() + 1
 
     async def insert_data(self, data: Base) -> None:
         async with self.async_session() as session:
@@ -61,8 +46,8 @@ class MusicDatabase():
     # TODO: CURRENT PLAN FOR STATS EMBEDS/DATABASE
     # DONE: Create embed in SongQueue object to be consistent with Song embed and future Stats embeds
     # DONE: Add guild id to song requests and plays to add support for multiple servers and to be consistent with audio_players in MusicCog
-    # DONE:  Separate classes for Stats and MusicDatabase: 
-    # DONE: Stats has instance of MusicDatabase and uses it to get stats data, then transforms it into a discord embed
+    # DONE:  Separate classes for Stats and UsageDatabase: 
+    # DONE: Stats has instance of UsageDatabase and uses it to get stats data, then transforms it into a discord embed
     # Stats class also creates graphs, which can be embedded
     # add argument parsing logic to stats command in MusicCog to get stats for song, user, or everything
     # may share logic with already existing argument parsing logic for the play command, reuse code as necessary

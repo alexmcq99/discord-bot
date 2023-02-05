@@ -1,5 +1,5 @@
 import asyncio
-from config.config import Config
+from config import Config
 import discord
 from discord.ext import commands
 from music_bot.music_cog import MusicCog

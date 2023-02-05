@@ -1,6 +1,6 @@
 import discord
 from discord.ext.commands import Context
-from .music_database import MusicDatabase, SongRequest
+from .usage_database import UsageDatabase, SongRequest
 from .utils import format_time_str
 from typing import Any, Optional
 from .youtube import YoutubeVideo
@@ -45,8 +45,8 @@ class UserSongStats(Stats):
         super().__init__(embed_title, thumbnail_url, stats)
 
 class StatsFactory:
-    def __init__(self, music_db: MusicDatabase) -> None:
-        self.music_db: MusicDatabase = music_db
+    def __init__(self, music_db: UsageDatabase) -> None:
+        self.music_db: UsageDatabase = music_db
         self.ctx: Context = None
     
     async def create_stats(

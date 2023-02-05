@@ -1,10 +1,9 @@
 from .audio_player import AudioPlayer
-from config.config import Config
-import discord
+from config import Config
 from discord.ext import commands
-from .music_database import MusicDatabase
+from .usage_database import UsageDatabase
 import re
-from .songs import SongFactory
+from .song_factory import SongFactory
 from .spotify import is_spotify_url
 from .stats import StatsFactory
 import traceback
@@ -15,7 +14,7 @@ class MusicCog(commands.Cog):
     def __init__(self, bot: commands.Bot, config: Config):
         self.bot: commands.Bot = bot
         self.config: Config = config
-        self.music_db: MusicDatabase = MusicDatabase(config)
+        self.music_db: UsageDatabase = UsageDatabase(config)
         self.song_factory: SongFactory = SongFactory(config, self.music_db)
         self.stats_factory: StatsFactory = StatsFactory(self.music_db)
         self.audio_players: dict[int, AudioPlayer] = dict()

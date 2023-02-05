@@ -1,5 +1,5 @@
 from asyncspotify import Client, ClientCredentialsFlow
-from config.config import Config
+from config import Config
 import re
 from urllib.parse import urlparse
 

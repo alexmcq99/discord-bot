@@ -1,19 +1,19 @@
 import asyncio
-from config.config import Config
+from config import Config
 from datetime import datetime
 from discord import VoiceClient
 from discord.ext.commands import Bot
-from .music_database import MusicDatabase
-from .songs import Song, SongQueue
+from .usage_database import UsageDatabase
+from .song import Song, SongQueue
 import traceback
 
 class AudioError(Exception):
     pass
 
 class AudioPlayer:
-    def __init__(self, config: Config, bot: Bot, music_db: MusicDatabase, inactivity_timeout: int):
+    def __init__(self, config: Config, bot: Bot, music_db: UsageDatabase, inactivity_timeout: int):
         self.bot: Bot = bot
-        self.music_db: MusicDatabase = music_db
+        self.music_db: UsageDatabase = music_db
         self.inactivity_timeout: int = inactivity_timeout
         self.current_song: Song = None
         self.voice_client: VoiceClient = None
