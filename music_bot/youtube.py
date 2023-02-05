@@ -95,7 +95,9 @@ class YoutubeVideo():
             hours, minutes = divmod(minutes, 60)
         self.formatted_duration: str = f"{str(hours).zfill(2)}:{str(minutes).zfill(2)}:{str(seconds).zfill(2)}"
         
-        target_streams = [stream for stream in video_data["streamingData"]["adaptiveFormats"] if stream["mimeType"] == self.TARGET_MIME_TYPE]
+        streaming_data = video_data["streamingData"]
+        adaptive_formats = streaming_data["adaptiveFormats"]
+        target_streams = [stream for stream in adaptive_formats if stream["mimeType"] == self.TARGET_MIME_TYPE]
         best_stream = max(target_streams, key = lambda stream: stream["bitrate"])
         self.stream_url: str = best_stream["url"]
 
