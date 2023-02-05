@@ -1,6 +1,6 @@
 import asyncio
 from config.config import Config
-from datetime import datetime
+from datetime import datetime, timedelta
 import discord
 from discord.abc import Guild, GuildChannel
 from discord.ext.commands import Context
@@ -27,16 +27,16 @@ class Song:
         self.channel_where_requested: GuildChannel = ctx.channel
         self.timestamp_requested: datetime = datetime.now()
         self.timestamp_last_played: datetime = None
-        self.timestamp_last_stopped: datetime = None
+        self.time_played: timedelta = timedelta()
 
     @property
     def audio_source(self) -> discord.FFmpegOpusAudio:
         return discord.FFmpegOpusAudio(source=self.stream_url, **self.FFMPEG_OPTIONS)
     
     @property
-    def duration_last_played(self) -> int:
+    def duration_played(self) -> float:
         if not self.timestamp_last_played:
-            return 0
+            return 0.0
         end_timestamp = self.timestamp_last_stopped or datetime.now()
         duration = end_timestamp - self.duration_last_played
         return duration.seconds
@@ -61,12 +61,19 @@ class Song:
     def create_embed(self) -> discord.Embed:
         return (discord.Embed(title="Current song:",
                 type="rich",
-                description=f"[{self.title}]({self.video_url})",
+                description=self.video_link_markdown,
                 color=discord.Color.random())
                 .add_field(name="Duration", value=self.formatted_duration)
                 .add_field(name="Requested by", value=self.requester.mention)
-                .add_field(name="Uploader", value=f"[{self.channel_name}]({self.channel_url})")
+                .add_field(name="Uploader", value=self.channel_link_markdown)
                 .set_thumbnail(url=self.thumbnail_url))
+
+    def record_stop(self):
+        if self.timestamp_last_played:
+            end_timestamp = datetime.now()
+            delta = end_timestamp - self.timestamp_last_played
+            self.time_played += delta
+            self.timestamp_last_played = None
 
     def __str__(self):
         return f":notes: **{self.title}** :notes: by **{self.channel_name}**"

@@ -128,6 +128,7 @@ class MusicCog(commands.Cog):
             return await ctx.send('There\'s no music to pause.')
         elif ctx.audio_player.voice_client.is_playing():
             ctx.audio_player.voice_client.pause()
+            ctx.audio_player.current_song.record_stop()
 
     @commands.command(name='resume', aliases=['unpause', 'continue'])
     async def resume(self, ctx: commands.Context):
@@ -146,6 +147,7 @@ class MusicCog(commands.Cog):
 
         if ctx.audio_player.is_playing:
             ctx.audio_player.voice_client.stop()
+            self.current_song.record_stop()
 
     @commands.command(name='skip')
     async def skip(self, ctx: commands.Context):
@@ -193,50 +195,43 @@ class MusicCog(commands.Cog):
 
         ctx.audio_player.song_queue.shuffle()
 
-    async def get_yt_url(self, ctx: commands.Context, possible_url: str):
-        if is_yt_video(possible_url):
-            return possible_url
-        elif validators.url(possible_url):
-            await ctx.send(f"Argument {possible_url} is structured like a url but is not a valid YouTube url.")
-
-    # TODO: Replace parsing helper methods with Converters
     async def parse_stats_args(self, ctx: commands.Context, args: tuple[str]):
         if not args:
             raise commands.UserInputError("No arguments provided. Please provide a url or search query.")
         
-        possible_user_mention = args[0]
+        kwargs = dict()
+        index = 0
+        possible_user_mention = args[index]
         pattern = r"<|@|>"
         user_id = re.sub(pattern, "", possible_user_mention)
         user = ctx.guild.get_member(user_id)
         if user:
-            kwargs["user"] = self.get_yt_url(args[1])
+            kwargs["user"] = user
+            index += 1
+            await ctx.send("Found user mention: ", possible_user_mention)
+            if index == len(args):
+                return kwargs
 
-        kwargs = dict()
-        for arg in args:
-            if "yt_video_url" not in kwargs:
-                possible_url = arg
-                if is_yt_video(possible_url):
-                    kwargs["yt_video_url"] = possible_url
-                elif validators.url(possible_url):
-                    await ctx.send(f"Argument {possible_url} is structured like a url but is not a valid YouTube url.")
-            elif "user" not in kwargs:
-                possible_user_mention = arg
-                pattern = r"<|@|>"
-                user_id = re.sub(pattern, "", possible_user_mention)
-                user = ctx.guild.get_member(user_id)
-                if user:
-                    kwargs["user"] = user
+        possible_url = args[index]
+        if is_yt_video(possible_url):
+            kwargs["yt_video_url"] = possible_url
+            await ctx.send("Found Youtube url: ", possible_url)
+            if index + 1 < len(args):
+                await ctx.send(f"Ignoring arguments: {args[index + 1:]}")
+        elif validators.url(possible_url):
+            raise commands.BadArgument(f"Argument {possible_url} is structured like a url but is not a valid YouTube url.")
         else:
-                    kwargs["yt_search_query"] = " ".join(args)
+            kwargs["yt_search_query"] = " ".join(args[index:])
+            await ctx.send("Found Youtube search query: ", kwargs["yt_search_query"])
         return kwargs
 
     @commands.command(name='stats')
     async def stats(self, ctx: commands.Context, *args):
         """Gets stats on a song, user, or server"""
 
-        kwargs = self.parse_stats_args(ctx, args)
-        stats = self.stats_factory.create_stats(ctx, kwargs)
-        await ctx.send(embed=stats.create_main_embed())
+        kwargs = await self.parse_stats_args(ctx, args)
+        stats = await self.stats_factory.create_stats(ctx, kwargs)
+        await ctx.send(embed=stats.create_embed())
 
     @commands.command(name='remove')
     async def remove(self, ctx: commands.Context, index: int):

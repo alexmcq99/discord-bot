@@ -101,6 +101,14 @@ class YoutubeVideo():
         best_stream = max(target_streams, key = lambda stream: stream["bitrate"])
         self.stream_url: str = best_stream["url"]
 
+    @property
+    def video_link_markdown(self):
+        return f"[{self.title}]({self.video_url})"
+    
+    @property
+    def channel_link_markdown(self):
+        return f"[{self.channel_name}]({self.channel_url})"
+
     @classmethod
     async def from_search_query(cls, search_query: str):
         try:

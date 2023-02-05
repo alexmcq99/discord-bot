@@ -63,7 +63,7 @@ class AudioPlayer:
             raise AudioError(str(error))
 
         print("Song is done, preparing to play next song.")
-        self.current_song.timestamp_last_stopped = datetime.now()
+        self.current_song.record_stop()
         self.bot.loop.create_task(self.music_db.insert_data(self.current_song.song_play))
         if self.is_looping:
             self.song_queue.put_nowait(self.current_song)
@@ -73,10 +73,13 @@ class AudioPlayer:
     def skip(self):
         if self.voice_client.is_playing():
             self.voice_client.stop()
+            self.current_song.record_stop()
+            return True
+        return False
 
     async def stop(self):
         self.song_queue.clear()
-
         if self.voice_client:
+            self.current_song.record_stop()
             await self.voice_client.disconnect()
             self.voice_client = None
