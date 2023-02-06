@@ -8,9 +8,9 @@ import traceback
 from .youtube import YoutubePlaylist, YoutubeVideo
 
 class SongFactory:
-    def __init__(self, config: Config, music_db: UsageDatabase) -> None:
+    def __init__(self, config: Config, usage_db: UsageDatabase) -> None:
         self.config: Config = config
-        self.music_db: UsageDatabase = music_db
+        self.usage_db: UsageDatabase = usage_db
         self.ctx: Context = None
         self.spotify_client_wrapper = SpotifyClientWrapper(config)
         
@@ -82,5 +82,5 @@ class SongFactory:
         if not yt_video:
             return None
         song = Song(self.config, yt_video, self.ctx)
-        await self.music_db.insert_data(song.song_request)
+        await self.usage_db.insert_data(song.create_song_request())
         return song

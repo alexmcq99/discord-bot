@@ -11,10 +11,10 @@ class AudioError(Exception):
     pass
 
 class AudioPlayer:
-    def __init__(self, config: Config, bot: Bot, music_db: UsageDatabase, inactivity_timeout: int):
+    def __init__(self, config: Config, bot: Bot, usage_db: UsageDatabase):
         self.bot: Bot = bot
-        self.music_db: UsageDatabase = music_db
-        self.inactivity_timeout: int = inactivity_timeout
+        self.usage_db: UsageDatabase = usage_db
+        self.inactivity_timeout: int = config.inactivity_timeout
         self.current_song: Song = None
         self.voice_client: VoiceClient = None
         self.song_queue: SongQueue[Song] = SongQueue(config.max_shown_songs)
@@ -23,7 +23,8 @@ class AudioPlayer:
         self.audio_player: asyncio.Task = None
 
     def __del__(self):
-        self.audio_player.cancel()
+        if self.audio_player:
+            self.audio_player.cancel()
 
     @property
     def is_playing(self) -> bool:
@@ -63,23 +64,27 @@ class AudioPlayer:
             raise AudioError(str(error))
 
         print("Song is done, preparing to play next song.")
-        self.current_song.record_stop()
-        self.bot.loop.create_task(self.music_db.insert_data(self.current_song.song_play))
+        asyncio.run_coroutine_threadsafe(self.record_song_play(), loop=self.bot.loop)
         if self.is_looping:
             self.song_queue.put_nowait(self.current_song)
         self.current_song = None
         self.play_next_song_event.set()
 
-    def skip(self):
+    async def skip(self):
         if self.voice_client.is_playing():
             self.voice_client.stop()
-            self.current_song.record_stop()
+            await self.record_song_play()
             return True
         return False
 
     async def stop(self):
         self.song_queue.clear()
+        if self.is_playing:
+            await self.record_song_play()
         if self.voice_client:
-            self.current_song.record_stop()
             await self.voice_client.disconnect()
             self.voice_client = None
+    
+    async def record_song_play(self):
+        self.current_song.record_stop()
+        await self.usage_db.insert_data(self.current_song.create_song_play())

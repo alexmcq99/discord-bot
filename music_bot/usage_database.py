@@ -1,14 +1,17 @@
+from collections.abc import Sequence
 from config import Config
 
 from .song import Song
 from .usage_tables import Base, SongRequest, SongPlay
 
-from typing import Any, Optional
+from typing import Any, Optional, Type
 from sqlalchemy import asc, select
 from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import aliased
+from sqlalchemy.orm.attributes import InstrumentedAttribute
 
 class UsageDatabase():
     def __init__(self, config: Config):
@@ -27,21 +30,17 @@ class UsageDatabase():
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
 
-        # TODO: replace all session.query syntax with syntax similar to this, using session.execute(), along with the select() function
         async with self.async_session() as session:
-            max_request_id_result = await session.execute(select(func.max(SongRequest.id)))
-            max_play_id_result = await session.execute(select(func.max(SongPlay.id)))
-            max_request_id = max_request_id_result.scalar()
-            max_play_id = max_play_id_result.scalar()
-            if max_request_id:
-                Song.request_id_counter = max_request_id.scalar() + 1
-            if max_play_id:
-                Song.play_id_counter = max_play_id.scalar() + 1
+            max_request_id = await session.scalar(select(func.max(SongRequest.id)))
+            max_play_id = await session.scalar(select(func.max(SongPlay.id)))
+            Song.request_id_counter = max_request_id + 1
+            Song.play_id_counter = max_play_id + 1
 
     async def insert_data(self, data: Base) -> None:
         async with self.async_session() as session:
             async with session.begin():
                 session.add(data)
+                print(f"added data: {data!r}")
     
     # TODO: CURRENT PLAN FOR STATS EMBEDS/DATABASE
     # DONE: Create embed in SongQueue object to be consistent with Song embed and future Stats embeds
@@ -49,82 +48,79 @@ class UsageDatabase():
     # DONE:  Separate classes for Stats and UsageDatabase: 
     # DONE: Stats has instance of UsageDatabase and uses it to get stats data, then transforms it into a discord embed
     # Stats class also creates graphs, which can be embedded
-    # add argument parsing logic to stats command in MusicCog to get stats for song, user, or everything
+    # DONE: add argument parsing logic to stats command in MusicCog to get stats for song, user, or everything
     # may share logic with already existing argument parsing logic for the play command, reuse code as necessary
-    async def get_song_requests(self, filter_kwargs: dict[str, Any]) -> list[SongRequest]:
-        song_requests = await self.get_data(SongRequest, **filter_kwargs)
+    async def get_song_requests(self, filter_kwargs: dict[str, Any]) -> Sequence[SongRequest]:
+        song_requests = await self.get_data(SongRequest, filter_kwargs)
         return song_requests
     
-    async def get_song_plays(self, filter_kwargs: dict[str, Any]) -> list[SongPlay]:
-        song_plays = await self.get_data(SongPlay, **filter_kwargs)
+    async def get_song_plays(self, filter_kwargs: dict[str, Any]) -> Sequence[SongPlay]:
+        song_plays = await self.get_data(SongPlay, filter_kwargs)
         return song_plays
     
-    async def get_data(self, table: type, filter_kwargs: dict[str, Any]) -> list[Base]:
+    async def get_data(self, table: type, filter_kwargs: dict[str, Any]) -> Sequence[SongRequest | SongPlay]:
         async with self.async_session() as session:
-            result = await session.execute(select(table).filter_by(**filter_kwargs).order_by(asc(table.timestamp)))
+            result = await session.scalars(select(table).filter_by(**filter_kwargs).order_by(asc(table.timestamp)))
             data = result.all()
             return data
 
     async def get_song_request_count(self, filter_kwargs: dict[str, Any]) -> int:
-        song_request_count = await self.get_count(SongPlay, **filter_kwargs)
+        song_request_count = await self.get_count(SongRequest, filter_kwargs)
+        print("Times requested: ", song_request_count)
         return song_request_count
     
     async def get_song_play_count(self, filter_kwargs: dict[str, Any]) -> int:
-        song_play_count = await self.get_count(SongPlay, **filter_kwargs)
+        song_play_count = await self.get_count(SongPlay, filter_kwargs)
+        print("Times played: ", song_play_count)
         return song_play_count
     
     async def get_count(self, table: type, filter_kwargs: dict[str, Any]) -> int:
         async with self.async_session() as session:
-            result = await session.execute(select(func.count(table)).filter_by(**filter_kwargs))
-            count = result.scalar()
-            return count
+            statement = select(func.count(table.id)).filter_by(**filter_kwargs)
+            count = await session.scalar(statement)
+            return count or -1
     
     async def get_first_request(self, filter_kwargs: dict[str, Any]) -> SongRequest:
-        async with self.async_session() as session:
-            result = await session.execute(select(func.min(SongRequest.timestamp)).filter_by(**filter_kwargs))
-            first_request_timestamp = result.scalar()
-            result = await session.execute(select(SongRequest).filter_by(timestamp = first_request_timestamp, **filter_kwargs))
-            first_request = result.first()
-            return first_request
+        first_request = await self.get_request(func.min, filter_kwargs)
+        return first_request
     
     async def get_latest_request(self, filter_kwargs: dict[str, Any]) -> SongRequest:
+        latest_request = await self.get_request(func.max, filter_kwargs)
+        return latest_request
+    
+    async def get_request(self, agg_func: Type[func.min] | Type[func.max], filter_kwargs: dict[str, Any]) -> SongRequest:
         async with self.async_session() as session:
-            result = await session.execute(select(func.max(SongRequest.timestamp)).filter_by(**filter_kwargs))
-            latest_request_timestamp = result.scalar()
-            result = await session.execute(select(SongRequest).filter_by(timestamp = latest_request_timestamp, **filter_kwargs))
-            latest_request = result.first()
-            return latest_request
+            timestamp_statement = select(agg_func(SongRequest.timestamp)).filter_by(**filter_kwargs)
+            request_timestamp = await session.scalar(timestamp_statement)
+            request_statement = select(SongRequest).filter_by(timestamp = request_timestamp, **filter_kwargs)
+            result = await session.scalars(request_statement)
+            request = result.first()
+            return request
 
-    async def get_total_play_duration(self, filter_kwargs: dict[str, Any]) -> int:
+    async def get_total_play_duration(self, filter_kwargs: dict[str, Any]) -> float:
         async with self.async_session() as session:
-            result = await session.execute(select(func.sum(SongPlay.duration)).filter_by(**filter_kwargs))
-            total_play_duration = result.scalar()
-            return total_play_duration
+            statement = select(func.sum(SongPlay.duration)).filter_by(**filter_kwargs)
+            total_play_duration = await session.scalar(statement)
+            return total_play_duration or 0
     
     async def get_most_requested_song(self, filter_kwargs: dict[str, Any]) -> tuple[str, int]:
-        async with self.async_session() as session:
-            request_counts = await (select(
-                SongRequest.song_id, 
-                func.count(SongRequest.song_id).label("count"))
-                .filter_by(**filter_kwargs)
-                .group_by(SongRequest.song_id)
-                .subquery("request_counts"))
-            result = await session.execute(select(func.max(request_counts.count)))
-            max_request_count = result.scalar()
-            result = await session.execute(select(request_counts.song_id).filter_by(count = max_request_count))
-            most_requested_song_id = result.first()
-            return most_requested_song_id, max_request_count
+        song_id, request_count = await self.get_most_common_id(SongRequest.song_id, filter_kwargs)
+        return song_id, request_count
 
-    async def get_most_frequent_requester(self, filter_kwargs: dict[str, Any]) -> int:
+    async def get_most_frequent_requester(self, filter_kwargs: dict[str, Any]) -> tuple[int, int]:
+        requester_id, request_count = await self.get_most_common_id(SongRequest.requester_id, filter_kwargs)
+        return requester_id, request_count
+    
+    async def get_most_common_id(self, id_attribute: InstrumentedAttribute, filter_kwargs: dict[str, Any]) -> tuple[str | int, int]:
         async with self.async_session() as session:
-            request_counts = await (select(
-                SongRequest.requester_id, 
-                func.count(SongRequest.requester_id).label("count"))
+            request_counts_statement = (select(
+                id_attribute.label("id"), 
+                func.count(id_attribute).label("count"))
                 .filter_by(**filter_kwargs)
-                .group_by(SongRequest.requester_id)
-                .subquery("request_counts"))
-            result = await session.execute(select(func.max(request_counts.count)))
-            max_request_count = result.scalar()
-            result = await session.execute(select(request_counts.song_id).filter_by(count = max_request_count))
-            most_frequent_requester_id = result.first()
-            return most_frequent_requester_id, max_request_count
+                .group_by(id_attribute))
+            request_counts = aliased(request_counts_statement.subquery())
+            max_count_statement = select(func.max(request_counts.c.count))
+            max_count = await session.scalar(max_count_statement)
+            most_common_id_statement = select(request_counts.c.id).where(request_counts.c.count == max_count)
+            most_common_id = await session.scalar(most_common_id_statement)
+            return most_common_id, max_count

@@ -1,8 +1,9 @@
 from datetime import datetime
-from sqlalchemy.orm import declarative_base, mapped_column
-from sqlalchemy.orm import Mapped
+from sqlalchemy.orm import mapped_column
+from sqlalchemy.orm import DeclarativeBase, Mapped
 
-Base = declarative_base()
+class Base(DeclarativeBase):
+    pass
 
 class SongRequest(Base):
     __tablename__ = "song_request"
@@ -14,7 +15,7 @@ class SongRequest(Base):
     song_id: Mapped[str]
 
     def __repr__(self) -> str:
-        return f"User(id={self.timestamp!r}, guild_id={self.guild_id!r}, requester_id={self.requester_id!r}, song_id={self.song_id!r})"
+        return f"SongRequest(id={self.id!r}, timestamp={self.timestamp!r}, guild_id={self.guild_id!r}, requester_id={self.requester_id!r}, song_id={self.song_id!r})"
 
 class SongPlay(Base):
     __tablename__ = "song_play"
@@ -24,7 +25,7 @@ class SongPlay(Base):
     guild_id: Mapped[int]
     requester_id: Mapped[int]
     song_id: Mapped[str]
-    duration: Mapped[int]
+    duration: Mapped[float]
 
     def __repr__(self) -> str:
-        return f"User(id={self.timestamp!r}, guild_id={self.guild_id!r}, requester_id={self.requester_id!r}, song_id={self.song_id!r}, duration={self.duration!r})"
+        return f"SongPlay(id={self.id!r}, timestamp={self.timestamp!r}, guild_id={self.guild_id!r}, requester_id={self.requester_id!r}, song_id={self.song_id!r}, duration={self.duration!r})"

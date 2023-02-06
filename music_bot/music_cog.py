@@ -14,9 +14,9 @@ class MusicCog(commands.Cog):
     def __init__(self, bot: commands.Bot, config: Config):
         self.bot: commands.Bot = bot
         self.config: Config = config
-        self.music_db: UsageDatabase = UsageDatabase(config)
-        self.song_factory: SongFactory = SongFactory(config, self.music_db)
-        self.stats_factory: StatsFactory = StatsFactory(self.music_db)
+        self.usage_db: UsageDatabase = UsageDatabase(config)
+        self.song_factory: SongFactory = SongFactory(config, self.usage_db)
+        self.stats_factory: StatsFactory = StatsFactory(self.usage_db)
         self.audio_players: dict[int, AudioPlayer] = dict()
         self.default_reaction: str = "✅"
         self.reactions: dict[str, str] = {
@@ -40,13 +40,13 @@ class MusicCog(commands.Cog):
         if audio_player:
             print("Retrieved audio manager")
         if not audio_player:
-            audio_player = AudioPlayer(self.bot, self.music_db, self.config.inactivity_timeout)
+            audio_player = AudioPlayer(self.config, self.bot, self.usage_db)
             self.audio_players[guild_id] = audio_player
             print(f"Stored audio manager: {audio_player}")
         return audio_player
     
     async def cog_load(self):
-        await self.music_db.initialize()
+        await self.usage_db.initialize()
         print("booting up")
 
     def cog_unload(self):
@@ -195,21 +195,24 @@ class MusicCog(commands.Cog):
         ctx.audio_player.song_queue.shuffle()
 
     async def parse_stats_args(self, ctx: commands.Context, args: tuple[str]):
-        if not args:
-            raise commands.UserInputError("No arguments provided. Please provide a url or search query.")
-        
         kwargs = dict()
+        if not args:
+            return kwargs
+        
         index = 0
         possible_user_mention = args[index]
-        pattern = r"<|@|>"
-        user_id = re.sub(pattern, "", possible_user_mention)
-        user = ctx.guild.get_member(user_id)
-        if user:
-            kwargs["user"] = user
-            index += 1
-            await ctx.send("Found user mention: ", possible_user_mention)
-            if index == len(args):
-                return kwargs
+        print(possible_user_mention)
+        pattern = r"<|!|@|>"
+        user_id_str = re.sub(pattern, "", possible_user_mention)
+        if user_id_str.isdigit():
+            user_id = int(user_id_str)
+            user = ctx.guild.get_member(user_id)
+            if user:
+                kwargs["user"] = user
+                index += 1
+                await ctx.send(f"Found user mention: {possible_user_mention}")
+                if index == len(args):
+                    return kwargs
 
         possible_url = args[index]
         if is_yt_video(possible_url):
@@ -221,7 +224,7 @@ class MusicCog(commands.Cog):
             raise commands.BadArgument(f"Argument {possible_url} is structured like a url but is not a valid YouTube url.")
         else:
             kwargs["yt_search_query"] = " ".join(args[index:])
-            await ctx.send("Found Youtube search query: ", kwargs["yt_search_query"])
+            await ctx.send(f"Found Youtube search query: {kwargs['yt_search_query']}")
         return kwargs
 
     @commands.command(name='stats')
@@ -229,7 +232,7 @@ class MusicCog(commands.Cog):
         """Gets stats on a song, user, or server"""
 
         kwargs = await self.parse_stats_args(ctx, args)
-        stats = await self.stats_factory.create_stats(ctx, kwargs)
+        stats = await self.stats_factory.create_stats(ctx, **kwargs)
         await ctx.send(embed=stats.create_embed())
 
     @commands.command(name='remove')

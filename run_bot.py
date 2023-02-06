@@ -24,8 +24,8 @@ if __name__ == "__main__":
     async def on_ready():
         print('Logged in as:\n{0.user.name}\n{0.user.id}'.format(bot))
 
-    if platform.system() == "Windows":
-        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    # if platform.system() == "Windows":
+    #     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
     asyncio.run(bot.add_cog(MusicCog(bot, config)))
 
     print("Added the cog")

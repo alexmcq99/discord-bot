@@ -8,6 +8,7 @@ import itertools
 import math
 from .usage_tables import SongPlay, SongRequest
 import random
+from .time_utils import format_timedelta
 from typing import Any
 from .youtube import YoutubeVideo
 
@@ -32,35 +33,27 @@ class Song:
     @property
     def audio_source(self) -> discord.FFmpegOpusAudio:
         return discord.FFmpegOpusAudio(source=self.stream_url, **self.FFMPEG_OPTIONS)
-    
-    @property
-    def duration_played(self) -> float:
-        if not self.timestamp_last_played:
-            return 0.0
-        end_timestamp = self.timestamp_last_stopped or datetime.now()
-        duration = end_timestamp - self.duration_last_played
-        return duration.seconds
 
-    @property
-    def song_request(self) -> SongRequest:
+    def create_song_request(self) -> SongRequest:
         song_request = SongRequest(
             id=self.request_id_counter,
             timestamp=self.timestamp_requested,
             guild_id=self.guild.id,
             requester_id=self.requester.id,
-            song_id=self.video_id)
+            song_id=self.video_id
+        )
         Song.request_id_counter += 1
         return song_request
     
-    @property
-    def song_play(self) -> SongPlay:
+    def create_song_play(self) -> SongPlay:
         song_play = SongPlay(
             id=self.play_id_counter,
             timestamp=self.timestamp_requested,
             guild_id=self.guild.id,
             requester_id=self.requester.id,
             song_id=self.video_id,
-            duration=self.duration_last_played)
+            duration=self.time_played.total_seconds()
+        )
         Song.play_id_counter += 1
         return song_play
     
