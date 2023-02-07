@@ -212,16 +212,16 @@ class MusicCog(commands.Cog):
             if user:
                 kwargs["user"] = user
                 index += 1
-                # await ctx.send(f"Found user mention: {possible_user_mention}")
+                print(f"Found user mention: {possible_user_mention}")
                 if index == len(args):
                     return kwargs
 
         possible_url = args[index]
         if is_yt_video(possible_url):
             kwargs["yt_video_url"] = possible_url
-            # await ctx.send("Found Youtube url: ", possible_url)
+            print("Found Youtube url: ", possible_url)
             if index + 1 < len(args):
-                # await ctx.send(f"Ignoring arguments: {args[index + 1:]}")
+                print(f"Ignoring arguments: {args[index + 1:]}")
         elif validators.url(possible_url):
             raise commands.BadArgument(f"Argument {possible_url} is structured like a url but is not a valid YouTube url.")
         else:
