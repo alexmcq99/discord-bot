@@ -92,7 +92,7 @@ class SongQueue(asyncio.Queue):
         end = start + self.max_shown_songs
 
         queue_str = ""
-        for i, song in enumerate(self._queue[start:end], start=start):
+        for i, song in enumerate(itertools.islice(self._queue, start, end), start=start):
             queue_str += f"`{i + 1}.`  [**{song.title}**]({song.video_url})\n"
 
         embed_title = f"**Song queue has {len(self._queue)} track{'s' if len(self._queue) > 1 else ''}**:"
