@@ -47,9 +47,10 @@ class SongStats(Stats):
 
 class UserSongStats(Stats):
     def __init__(self, user: discord.Member, yt_video: YoutubeVideo, stats: dict[str, str]) -> None:
-        embed_title = f"Stats for {user.mention} with {yt_video.video_link_markdown})"
+        embed_title = f"Stats for User and Song:"
+        embed_description = f"{user.mention} and {yt_video.video_link_markdown}"
         thumbnail_url = user.avatar.url
-        super().__init__(embed_title, thumbnail_url, stats)
+        super().__init__(embed_title, embed_description, thumbnail_url, stats)
 
 class StatsFactory:
     def __init__(self, usage_db: UsageDatabase) -> None:
@@ -146,8 +147,8 @@ class StatsFactory:
             "Times Played": await self.usage_db.get_song_play_count(filter_kwargs),
             "Duration": yt_video.formatted_duration,
             "Total Time Played": format_time_str(await self.usage_db.get_total_play_duration(filter_kwargs)),
-            "First Request": await self.usage_db.get_first_request(filter_kwargs).timestamp,
-            "Most Recent Request": await self.usage_db.get_latest_request(filter_kwargs).timestamp
+            "First Request": self.format_request_for_user_song(await self.usage_db.get_first_request(filter_kwargs)),
+            "Most Recent Request": self.format_request_for_user_song(await self.usage_db.get_latest_request(filter_kwargs)),
         }
         user_song_stats = UserSongStats(user, yt_video, stats)
         return user_song_stats
@@ -171,6 +172,11 @@ class StatsFactory:
             return "N/A"
         requester = self.ctx.guild.get_member(song_request.requester_id)
         return f"{format_datetime(song_request.timestamp)}, by {requester.mention}"
+    
+    def format_request_for_user_song(self, song_request: SongRequest) -> str:
+        if not song_request:
+            return "N/A"
+        return format_datetime(song_request.timestamp)
 
     async def get_most_frequent_requester_formatted(self, filter_kwargs: dict[str, Any]) -> str:
         requester_id, request_count = await self.usage_db.get_most_frequent_requester(filter_kwargs)

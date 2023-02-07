@@ -203,7 +203,7 @@ class MusicCog(commands.Cog):
         
         index = 0
         possible_user_mention = args[index]
-        await ctx.send(possible_user_mention)
+        # await ctx.send(possible_user_mention)
         pattern = r"<|!|@|>" # <@1293190231243>
         user_id_str = re.sub(pattern, "", possible_user_mention)
         if user_id_str.isdigit():
@@ -212,16 +212,16 @@ class MusicCog(commands.Cog):
             if user:
                 kwargs["user"] = user
                 index += 1
-                await ctx.send(f"Found user mention: {possible_user_mention}")
+                # await ctx.send(f"Found user mention: {possible_user_mention}")
                 if index == len(args):
                     return kwargs
 
         possible_url = args[index]
         if is_yt_video(possible_url):
             kwargs["yt_video_url"] = possible_url
-            await ctx.send("Found Youtube url: ", possible_url)
+            # await ctx.send("Found Youtube url: ", possible_url)
             if index + 1 < len(args):
-                await ctx.send(f"Ignoring arguments: {args[index + 1:]}")
+                # await ctx.send(f"Ignoring arguments: {args[index + 1:]}")
         elif validators.url(possible_url):
             raise commands.BadArgument(f"Argument {possible_url} is structured like a url but is not a valid YouTube url.")
         else:

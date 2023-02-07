@@ -91,11 +91,13 @@ class UsageDatabase():
         return latest_request
     
     async def get_request(self, agg_func: Type[func.min] | Type[func.max], filter_kwargs: dict[str, Any]) -> SongRequest:
+        print(filter_kwargs)
         async with self.async_session() as session:
             timestamp_statement = select(agg_func(SongRequest.timestamp)).filter_by(**filter_kwargs)
             request_timestamp = await session.scalar(timestamp_statement)
             request_statement = select(SongRequest).filter_by(timestamp = request_timestamp, **filter_kwargs)
             result = await session.scalars(request_statement)
+            print(result)
             request = result.first()
             return request
 
