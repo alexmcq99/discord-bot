@@ -1,5 +1,6 @@
 from .audio_player import AudioPlayer
 from config import Config
+import discord
 from discord.ext import commands
 from .usage_database import UsageDatabase
 import re
@@ -7,6 +8,7 @@ from .song_factory import SongFactory
 from .spotify import is_spotify_url
 from .stats import StatsFactory
 import traceback
+from typing import overload
 import validators
 from .youtube import is_yt_playlist, is_yt_video
 
@@ -154,7 +156,7 @@ class MusicCog(commands.Cog):
         if not ctx.audio_player.is_playing:
             return await ctx.send('Not playing any music right now.')
 
-        ctx.audio_player.skip()
+        await ctx.audio_player.skip()
 
     @commands.command(name='status')
     async def status(self, ctx: commands.Context):
@@ -201,8 +203,8 @@ class MusicCog(commands.Cog):
         
         index = 0
         possible_user_mention = args[index]
-        print(possible_user_mention)
-        pattern = r"<|!|@|>"
+        await ctx.send(possible_user_mention)
+        pattern = r"<|!|@|>" # <@1293190231243>
         user_id_str = re.sub(pattern, "", possible_user_mention)
         if user_id_str.isdigit():
             user_id = int(user_id_str)

@@ -33,8 +33,10 @@ class UsageDatabase():
         async with self.async_session() as session:
             max_request_id = await session.scalar(select(func.max(SongRequest.id)))
             max_play_id = await session.scalar(select(func.max(SongPlay.id)))
-            Song.request_id_counter = max_request_id + 1
-            Song.play_id_counter = max_play_id + 1
+            if max_request_id > 0:
+                Song.request_id_counter = max_request_id + 1
+            if max_play_id > 0:
+                Song.play_id_counter = max_play_id + 1
 
     async def insert_data(self, data: Base) -> None:
         async with self.async_session() as session:
@@ -78,7 +80,7 @@ class UsageDatabase():
         async with self.async_session() as session:
             statement = select(func.count(table.id)).filter_by(**filter_kwargs)
             count = await session.scalar(statement)
-            return count or -1
+            return count or 0
     
     async def get_first_request(self, filter_kwargs: dict[str, Any]) -> SongRequest:
         first_request = await self.get_request(func.min, filter_kwargs)
