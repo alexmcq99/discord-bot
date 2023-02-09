@@ -1,9 +1,12 @@
-from contextlib import suppress
 import traceback
+from contextlib import suppress
 from typing import Any
+from urllib.parse import parse_qs, urlparse
+
 from unidecode import unidecode
-from urllib.parse import urlparse, parse_qs
 from youtubesearchpython.__future__ import Playlist, Video, VideosSearch
+
+from .time_utils import format_time_str, time_str_to_seconds
 
 REQUEST_TIMEOUT = 60 # seconds
 
@@ -65,9 +68,6 @@ class YoutubePlaylist():
                 video_data.update(video_formats)
         except Exception as e:
             traceback.print_exception(e)
-            # if not videos or "videos" not in videos or "id" not in videos["videos"]:
-            #     await self.ctx.send(f"YouTube playlist \"{url}\" was not available.")
-            #     raise CommandError
         return cls(playlist_data)
 
 class YoutubeVideo():
@@ -83,17 +83,8 @@ class YoutubeVideo():
         self.thumbnail_url: str = video_data["thumbnails"][0]["url"]
 
         duration = video_data["duration"]
-        if isinstance(duration, str):
-            time_units = video_data["duration"].split(":")
-            seconds = int(time_units[-1])
-            minutes = int(time_units[-2]) if len(time_units) > 1 else 0
-            hours = int(time_units[-3]) if len(time_units) > 2 else 0
-            self.duration: int = hours * 3600 + minutes * 60 + seconds
-        else:
-            self.duration: int = int(duration["secondsText"])
-            minutes, seconds = divmod(self.duration, 60)
-            hours, minutes = divmod(minutes, 60)
-        self.formatted_duration: str = f"{str(hours).zfill(2)}:{str(minutes).zfill(2)}:{str(seconds).zfill(2)}"
+        self.duration: int = time_str_to_seconds(duration) if isinstance(duration, str) else int(duration["secondsText"])
+        self.formatted_duration: str = format_time_str(self.duration)
         
         streaming_data = video_data["streamingData"]
         adaptive_formats = streaming_data["adaptiveFormats"]

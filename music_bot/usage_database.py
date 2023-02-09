@@ -1,17 +1,16 @@
 from collections.abc import Sequence
+from typing import Any, Optional, Type
+
+from sqlalchemy import asc, func, select
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.orm import aliased, sessionmaker
+from sqlalchemy.orm.attributes import InstrumentedAttribute
+
 from config import Config
 
 from .song import Song
-from .usage_tables import Base, SongRequest, SongPlay
+from .usage_tables import Base, SongPlay, SongRequest
 
-from typing import Any, Optional, Type
-from sqlalchemy import asc, select
-from sqlalchemy import func
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.ext.asyncio import create_async_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.orm import aliased
-from sqlalchemy.orm.attributes import InstrumentedAttribute
 
 class UsageDatabase():
     def __init__(self, config: Config):

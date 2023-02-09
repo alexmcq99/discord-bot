@@ -1,16 +1,20 @@
-from .audio_player import AudioPlayer
-from config import Config
-import discord
-from discord.ext import commands
-from .usage_database import UsageDatabase
+import asyncio
 import re
+import traceback
+
+import discord
+import validators
+from discord.ext import commands
+
+from config import Config
+
+from .audio_player import AudioPlayer
 from .song_factory import SongFactory
 from .spotify import is_spotify_url
 from .stats import StatsFactory
-import traceback
-from typing import overload
-import validators
+from .usage_database import UsageDatabase
 from .youtube import is_yt_playlist, is_yt_video
+
 
 class MusicCog(commands.Cog):
     def __init__(self, bot: commands.Bot, config: Config):
@@ -51,9 +55,9 @@ class MusicCog(commands.Cog):
         await self.usage_db.initialize()
         print("booting up")
 
-    def cog_unload(self):
-        for audio_player in self.audio_players.values():
-            self.bot.loop.create_task(audio_player.stop())
+    async def cog_unload(self):
+        tasks = [audio_player.stop() for audio_player in self.audio_players.values()]
+        await asyncio.gather(*tasks)
 
     def cog_check(self, ctx: commands.Context):
         if not ctx.guild:
@@ -153,10 +157,10 @@ class MusicCog(commands.Cog):
     @commands.command(name='skip')
     async def skip(self, ctx: commands.Context):
         """Skip a song."""
-        if not ctx.audio_player.is_playing:
-            return await ctx.send('Not playing any music right now.')
-
-        await ctx.audio_player.skip()
+        
+        skipped = await ctx.audio_player.skip()
+        if not skipped:
+            return await ctx.send('Not playing any music right now.')  
 
     @commands.command(name='status')
     async def status(self, ctx: commands.Context):
@@ -226,7 +230,7 @@ class MusicCog(commands.Cog):
             raise commands.BadArgument(f"Argument {possible_url} is structured like a url but is not a valid YouTube url.")
         else:
             kwargs["yt_search_query"] = " ".join(args[index:])
-            await ctx.send(f"Found Youtube search query: {kwargs['yt_search_query']}")
+            print(f"Found Youtube search query: {kwargs['yt_search_query']}")
         return kwargs
 
     @commands.command(name='stats')

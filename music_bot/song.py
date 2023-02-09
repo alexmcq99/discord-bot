@@ -1,16 +1,19 @@
 import asyncio
-from config import Config
+import itertools
+import math
+import random
 from datetime import datetime, timedelta
+from typing import Any
+
 import discord
 from discord.abc import Messageable
 from discord.ext.commands import Context
-import itertools
-import math
+
+from config import Config
+
 from .usage_tables import SongPlay, SongRequest
-import random
-from .time_utils import format_timedelta
-from typing import Any
 from .youtube import YoutubeVideo
+
 
 class Song:
     FFMPEG_OPTIONS = {
@@ -92,7 +95,7 @@ class SongQueue(asyncio.Queue):
         end = start + self.max_shown_songs
 
         queue_str = ""
-        for i, song in enumerate(itertools.islice(self._queue, start, end), start=start):
+        for i, song in enumerate(self[start:end], start=start):
             queue_str += f"`{i + 1}.`  [**{song.title}**]({song.video_url})\n"
 
         embed_title = f"**Song queue has {len(self._queue)} track{'s' if len(self._queue) > 1 else ''}**:"

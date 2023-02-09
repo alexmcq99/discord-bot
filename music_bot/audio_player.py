@@ -1,11 +1,15 @@
 import asyncio
-from config import Config
+import traceback
 from datetime import datetime
+
 from discord import VoiceClient
 from discord.ext.commands import Bot
-from .usage_database import UsageDatabase
+
+from config import Config
+
 from .song import Song, SongQueue
-import traceback
+from .usage_database import UsageDatabase
+
 
 class AudioError(Exception):
     pass
@@ -79,7 +83,7 @@ class AudioPlayer:
 
     async def stop(self):
         self.song_queue.clear()
-        if self.is_playing:
+        if self.current_song:
             await self.record_song_play()
         if self.voice_client:
             await self.voice_client.disconnect()

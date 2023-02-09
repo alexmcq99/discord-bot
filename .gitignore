@@ -29,6 +29,7 @@ music/
 
 # Logging
 log.txt
+error.txt
 
 # Testing
 app.py

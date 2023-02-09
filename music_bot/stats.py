@@ -1,9 +1,12 @@
+from typing import Any, Optional
+
 import discord
 from discord.ext.commands import Context
-from .usage_database import UsageDatabase, SongRequest
+
 from .time_utils import format_datetime, format_time_str
-from typing import Any, Optional
+from .usage_database import UsageDatabase
 from .youtube import YoutubeVideo
+
 
 class Stats:
     def __init__(self, embed_title: str, embed_description: str, thumbnail_url: str, stats: dict[str, str]) -> None:
@@ -24,34 +27,6 @@ class Stats:
             embed.add_field(name=name, value=value, inline=inline)
         return embed
 
-class ServerStats(Stats):
-    def __init__(self, guild: discord.Guild, stats: dict[str, str]) -> None:
-        embed_title = "Stats for Server:"
-        embed_description = guild.name
-        thumbnail_url = guild.icon.url
-        super().__init__(embed_title, embed_description, thumbnail_url, stats)
-
-class UserStats(Stats):
-    def __init__(self, user: discord.Member, stats: dict[str, str]) -> None:
-        embed_title = "Stats for User:"
-        embed_description =  user.mention
-        thumbnail_url = user.avatar.url
-        super().__init__(embed_title, embed_description, thumbnail_url, stats)
-
-class SongStats(Stats):
-    def __init__(self, yt_video: YoutubeVideo, stats: dict[str, str]) -> None:
-        embed_title = "Stats for Song:"
-        embed_description = yt_video.video_link_markdown
-        thumbnail_url = yt_video.thumbnail_url
-        super().__init__(embed_title, embed_description, thumbnail_url, stats)
-
-class UserSongStats(Stats):
-    def __init__(self, user: discord.Member, yt_video: YoutubeVideo, stats: dict[str, str]) -> None:
-        embed_title = f"Stats for User and Song:"
-        embed_description = f"{user.mention} and {yt_video.video_link_markdown}"
-        thumbnail_url = user.avatar.url
-        super().__init__(embed_title, embed_description, thumbnail_url, stats)
-
 class StatsFactory:
     def __init__(self, usage_db: UsageDatabase) -> None:
         self.usage_db: UsageDatabase = usage_db
@@ -67,116 +42,60 @@ class StatsFactory:
         filter_kwargs = {
             "guild_id": ctx.guild.id
         }
-        if user and (yt_search_query or yt_video_url):
-            stats = await self.create_user_song_stats(filter_kwargs, user, yt_search_query=yt_search_query, yt_video_url=yt_video_url)
-        elif user:
-            stats = await self.create_user_stats(filter_kwargs, user)
-        elif yt_search_query or yt_video_url:
-            stats = await self.create_song_stats(filter_kwargs, yt_search_query=yt_search_query, yt_video_url=yt_video_url)
-        else:
-            stats = await self.create_server_stats(filter_kwargs)
-        return stats
 
-    async def create_server_stats(self, filter_kwargs: dict[str, Any]) -> ServerStats:
-        stats = {
-            "Total Requests": await self.usage_db.get_song_request_count(filter_kwargs),
-            "Total Songs Played": await self.usage_db.get_song_play_count(filter_kwargs),
-            "Total Time Played": format_time_str(await self.usage_db.get_total_play_duration(filter_kwargs)),
-            "First Request": await self.format_request_for_server(await self.usage_db.get_first_request(filter_kwargs)),
-            "Most Recent Request": await self.format_request_for_server(await self.usage_db.get_latest_request(filter_kwargs)),
-            "Most Frequent Requester": await self.get_most_frequent_requester_formatted(filter_kwargs),
-            "Most Requested Song": await self.get_most_requested_song_formatted(filter_kwargs)
-        }
-        server_stats = ServerStats(self.ctx.guild, stats)
-        return server_stats
+        yt_video = None
+        if yt_search_query:
+            yt_video = await YoutubeVideo.from_search_query(yt_search_query)
+        elif yt_video_url:
+            yt_video = await YoutubeVideo.from_url(yt_video_url)
+        
+        if user:
+            filter_kwargs["requester_id"] = user.id
+            thumbnail_url = user.avatar.url
+        if yt_video:
+            filter_kwargs["song_id"] = yt_video.video_id
 
-    async def create_user_stats(self, filter_kwargs: dict[str, Any], user: discord.Member) -> UserStats:
-        filter_kwargs["requester_id"] = user.id
-        stats = {
+        total_duration = await self.usage_db.get_total_play_duration(filter_kwargs)
+        first_request = await self.usage_db.get_first_request(filter_kwargs)
+        latest_request = await self.usage_db.get_latest_request(filter_kwargs)
+        stats_dict = {
             "Requests Made": await self.usage_db.get_song_request_count(filter_kwargs),
-            "Requested Songs Played": await self.usage_db.get_song_play_count(filter_kwargs),
-            "Total Time Requested Songs Played": format_time_str(await self.usage_db.get_total_play_duration(filter_kwargs)),
-            "First Request": await self.format_request_for_user(await self.usage_db.get_first_request(filter_kwargs)),
-            "Most Recent Request": await self.format_request_for_user(await self.usage_db.get_latest_request(filter_kwargs)),
-            "Most Requested Song": await self.get_most_requested_song_formatted(filter_kwargs)
+            "Songs Played": await self.usage_db.get_song_play_count(filter_kwargs),
+            "Total Time Playing": format_time_str(total_duration),
+            "First Request": f"At {format_datetime(first_request.timestamp)}",
+            "Most Recent Request": f"At {format_datetime(latest_request.timestamp)}"
         }
-        user_stats = UserStats(user, stats)
-        return user_stats
-    
-    async def create_song_stats(
-            self, 
-            filter_kwargs: dict[str, Any], 
-            yt_search_query: Optional[str] = None, 
-            yt_video_url: Optional[str] = None) -> SongStats:
+
+        if not user:
+            first_requester = self.ctx.guild.get_member(first_request.requester_id)
+            latest_requester = self.ctx.guild.get_member(latest_request.requester_id)
+            stats_dict["First Request"] += f", by {first_requester.mention}"
+            stats_dict["Most Recent Request"] += f", by {latest_requester.mention}"
+            stats_dict["Most Frequent Requester"] = await self.get_most_frequent_requester_formatted(filter_kwargs)
+        if not yt_video:
+            first_yt_video = await YoutubeVideo.from_id(first_request.song_id)
+            latest_yt_video = await YoutubeVideo.from_id(latest_request.song_id)
+            stats_dict["First Request"] += f", requesting {first_yt_video.video_link_markdown}"
+            stats_dict["Most Recent Request"] += f", requesting {latest_yt_video.video_link_markdown}"
+            stats_dict["Most Requested Song"] = await self.get_most_requested_song_formatted(filter_kwargs)
         
-        if yt_search_query:
-            yt_video = await YoutubeVideo.from_search_query(yt_search_query)
+        if user and yt_video:
+            embed_title = "User/Song Stats:"
+            embed_description = f"{user.mention} and {yt_video.video_link_markdown}"
+        elif user:
+            embed_title = "User Stats:"
+            embed_description = user.mention
+        elif yt_video:
+            embed_title = "Song Stats:"
+            embed_description = yt_video.video_link_markdown
+            thumbnail_url = yt_video.thumbnail_url
         else:
-            yt_video = await YoutubeVideo.from_url(yt_video_url)
+            embed_title = "Server Stats:"
+            embed_description = ctx.guild.name
+            thumbnail_url = ctx.guild.icon.url
         
-        filter_kwargs["song_id"] = yt_video.video_id
-
-        stats = {
-            "Times Requested": await self.usage_db.get_song_request_count(filter_kwargs),
-            "Times Played": await self.usage_db.get_song_play_count(filter_kwargs),
-            "Total Time Played": format_time_str(await self.usage_db.get_total_play_duration(filter_kwargs)),
-            "First Request": self.format_request_for_song(await self.usage_db.get_first_request(filter_kwargs)),
-            "Most Recent Request": self.format_request_for_song(await self.usage_db.get_latest_request(filter_kwargs)),
-            "Most Frequent Requester": await self.get_most_frequent_requester_formatted(filter_kwargs)
-        }
-        song_stats = SongStats(yt_video, stats)
-        return song_stats
-    
-    async def create_user_song_stats(
-            self, 
-            filter_kwargs: dict[str, Any], 
-            user: discord.Member, 
-            yt_search_query: Optional[str] = None, 
-            yt_video_url: Optional[str] = None) -> UserSongStats:
-        
-        if yt_search_query:
-            yt_video = await YoutubeVideo.from_search_query(yt_search_query)
-        else:
-            yt_video = await YoutubeVideo.from_url(yt_video_url)
-        
-        filter_kwargs["requester_id"] = user.id
-        filter_kwargs["song_id"] = yt_video.video_id
-
-        stats = {
-            "Times Requested": await self.usage_db.get_song_request_count(filter_kwargs),
-            "Times Played": await self.usage_db.get_song_play_count(filter_kwargs),
-            "Duration": yt_video.formatted_duration,
-            "Total Time Played": format_time_str(await self.usage_db.get_total_play_duration(filter_kwargs)),
-            "First Request": self.format_request_for_user_song(await self.usage_db.get_first_request(filter_kwargs)),
-            "Most Recent Request": self.format_request_for_user_song(await self.usage_db.get_latest_request(filter_kwargs)),
-        }
-        user_song_stats = UserSongStats(user, yt_video, stats)
-        return user_song_stats
-
-    async def format_request_for_server(self, song_request: SongRequest) -> str:
-        if not song_request:
-            return "N/A"
-        formatted_for_user = await self.format_request_for_user(song_request)
-        formatted_for_song = self.format_request_for_song(song_request)
-        fully_formatted = formatted_for_song + formatted_for_user[formatted_for_user.rfind(","):]
-        return fully_formatted
-
-    async def format_request_for_user(self, song_request: SongRequest) -> str:
-        if not song_request:
-            return "N/A"
-        yt_video = await YoutubeVideo.from_id(song_request.song_id)
-        return f"{format_datetime(song_request.timestamp)}, requesting {yt_video.video_link_markdown}"
-    
-    def format_request_for_song(self, song_request: SongRequest) -> str:
-        if not song_request:
-            return "N/A"
-        requester = self.ctx.guild.get_member(song_request.requester_id)
-        return f"{format_datetime(song_request.timestamp)}, by {requester.mention}"
-    
-    def format_request_for_user_song(self, song_request: SongRequest) -> str:
-        if not song_request:
-            return "N/A"
-        return format_datetime(song_request.timestamp)
+        stats = Stats(embed_title, embed_description, thumbnail_url, stats_dict)
+        return stats
 
     async def get_most_frequent_requester_formatted(self, filter_kwargs: dict[str, Any]) -> str:
         requester_id, request_count = await self.usage_db.get_most_frequent_requester(filter_kwargs)

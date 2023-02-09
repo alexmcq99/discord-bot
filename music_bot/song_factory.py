@@ -1,11 +1,15 @@
 import asyncio
-from config import Config
+import traceback
+
 from discord.ext.commands import Context
-from .usage_database import UsageDatabase
+
+from config import Config
+
 from .song import Song
 from .spotify import SpotifyClientWrapper
-import traceback
+from .usage_database import UsageDatabase
 from .youtube import YoutubePlaylist, YoutubeVideo
+
 
 class SongFactory:
     def __init__(self, config: Config, usage_db: UsageDatabase) -> None:

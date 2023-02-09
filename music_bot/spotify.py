@@ -1,7 +1,10 @@
-from asyncspotify import Client, ClientCredentialsFlow
-from config import Config
 import re
 from urllib.parse import urlparse
+
+from asyncspotify import Client, ClientCredentialsFlow
+
+from config import Config
+
 
 def is_spotify_url(url):
         # https://open.spotify.com/track/405HNEYKGDifuMcAZvqrqA?si=f38076221d0246b5
