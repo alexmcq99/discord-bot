@@ -2,7 +2,6 @@ import asyncio
 import re
 import traceback
 
-import discord
 import validators
 from discord.ext import commands
 
@@ -151,8 +150,7 @@ class MusicCog(commands.Cog):
         ctx.audio_player.song_queue.clear()
 
         if ctx.audio_player.is_playing:
-            ctx.audio_player.voice_client.stop()
-            self.current_song.record_stop()
+            await ctx.audio_player.voice_client.stop()
 
     @commands.command(name='skip')
     async def skip(self, ctx: commands.Context):
@@ -167,6 +165,7 @@ class MusicCog(commands.Cog):
         """Shows the current song and queue, if any.
         """
 
+        await ctx.send(f"The queue is {'currently' if ctx.audio_player.is_looping else 'not'} looping.")
         await ctx.invoke(self.now)
         await ctx.invoke(self.queue)
 
@@ -260,6 +259,7 @@ class MusicCog(commands.Cog):
             return await ctx.send('Nothing being played at the moment.')
 
         ctx.audio_player.is_looping = not ctx.audio_player.is_looping
+        await ctx.send(f"The queue is {'now' if ctx.audio_player.is_looping else 'no longer'} looping.")
     
     async def parse_play_args(self, ctx: commands.Context, args: tuple[str]):
         if not args:
