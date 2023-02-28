@@ -7,6 +7,9 @@ from .time_utils import format_datetime, format_time_str
 from .usage_database import UsageDatabase
 from .youtube import YoutubeVideo
 
+import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
+import datetime as dt
 
 class Stats:
     def __init__(self, embed_title: str, embed_description: str, thumbnail_url: str, stats: dict[str, str]) -> None:
@@ -55,15 +58,28 @@ class StatsFactory:
         if yt_video:
             filter_kwargs["song_id"] = yt_video.video_id
 
+        requests_made = await self.usage_db.get_song_request_count(filter_kwargs)
+
+        songs_played = await self.usage_db.get_song_play_count(filter_kwargs)
+        songs_played += int(ctx.audio_player.is_playing)
+
         total_duration = await self.usage_db.get_total_play_duration(filter_kwargs)
+        if ctx.audio_player.is_playing:
+            total_duration += ctx.audio_player.current_song.total_seconds_played
+        formatted_total_duration = format_time_str(total_duration)
+
         first_request = await self.usage_db.get_first_request(filter_kwargs)
+        formatted_first_request = f"At {format_datetime(first_request.timestamp)}"
+
         latest_request = await self.usage_db.get_latest_request(filter_kwargs)
+        formatted_latest_request = f"At {format_datetime(latest_request.timestamp)}"
+
         stats_dict = {
-            "Requests Made": await self.usage_db.get_song_request_count(filter_kwargs),
-            "Songs Played": await self.usage_db.get_song_play_count(filter_kwargs),
-            "Total Time Playing": format_time_str(total_duration),
-            "First Request": f"At {format_datetime(first_request.timestamp)}",
-            "Most Recent Request": f"At {format_datetime(latest_request.timestamp)}"
+            "Requests Made": requests_made,
+            "Songs Played":  songs_played,
+            "Total Time Playing": formatted_total_duration,
+            "First Request": formatted_first_request,
+            "Most Recent Request": formatted_latest_request
         }
 
         if not user:

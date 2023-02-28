@@ -37,6 +37,13 @@ class Song:
     def audio_source(self) -> discord.FFmpegOpusAudio:
         return discord.FFmpegOpusAudio(source=self.stream_url, **self.FFMPEG_OPTIONS)
 
+    @property
+    def total_seconds_played(self) -> float:
+        seconds = self.time_played.total_seconds()
+        if self.timestamp_last_played:
+            seconds += datetime.now() - self.timestamp_last_played
+        return seconds
+
     def create_song_request(self) -> SongRequest:
         song_request = SongRequest(
             id=self.request_id_counter,
