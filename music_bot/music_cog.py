@@ -12,7 +12,7 @@ from .song_factory import SongFactory
 from .spotify import is_spotify_url
 from .stats import StatsFactory
 from .usage_database import UsageDatabase
-from .youtube import is_yt_playlist, is_yt_video
+from .youtube import is_yt_playlist, is_yt_video, YoutubeFactory
 
 
 class MusicCog(commands.Cog):
@@ -20,8 +20,9 @@ class MusicCog(commands.Cog):
         self.bot: commands.Bot = bot
         self.config: Config = config
         self.usage_db: UsageDatabase = UsageDatabase(config)
-        self.song_factory: SongFactory = SongFactory(config, self.usage_db)
-        self.stats_factory: StatsFactory = StatsFactory(self.usage_db)
+        self.yt_factory: YoutubeFactory = YoutubeFactory()
+        self.song_factory: SongFactory = SongFactory(config, self.usage_db, self.yt_factory)
+        self.stats_factory: StatsFactory = StatsFactory(config, self.usage_db, self.yt_factory)
         self.audio_players: dict[int, AudioPlayer] = dict()
         self.default_reaction: str = "✅"
         self.reactions: dict[str, str] = {
@@ -150,7 +151,7 @@ class MusicCog(commands.Cog):
         ctx.audio_player.song_queue.clear()
 
         if ctx.audio_player.is_playing:
-            await ctx.audio_player.voice_client.stop()
+            ctx.audio_player.voice_client.stop()
 
     @commands.command(name='skip')
     async def skip(self, ctx: commands.Context):
@@ -238,7 +239,11 @@ class MusicCog(commands.Cog):
 
         kwargs = await self.parse_stats_args(ctx, args)
         stats = await self.stats_factory.create_stats(ctx, **kwargs)
-        await ctx.send(embed=stats.create_embed())
+        await ctx.send(embed=stats.create_main_embed())
+        if stats.figure_filename:
+            figure_file, embed = stats.create_figure_embed()
+            # await ctx.send(embed=embed, file=figure_file)
+            await ctx.send(file=figure_file)
 
     @commands.command(name='remove')
     async def remove(self, ctx: commands.Context, index: int):
@@ -294,16 +299,13 @@ class MusicCog(commands.Cog):
         """
 
         kwargs = await self.parse_play_args(ctx, args)
+        if not ctx.audio_player.voice_client:
+            print("joining voice channel")
+            await ctx.invoke(self.join)
         async with ctx.typing():
-            print("getting songs")
-            songs = await self.song_factory.create_songs(ctx, **kwargs)
-            print("created songs")
-            if not ctx.audio_player.voice_client:
-                print("joining voice channel")
-                await ctx.invoke(self.join)
             if not ctx.audio_player.audio_player or ctx.audio_player.audio_player.done():
                 ctx.audio_player.start_audio_player()
-            for song in songs:
+            async for song in self.song_factory.create_songs(ctx, **kwargs):
                 await ctx.audio_player.song_queue.put(song)
                 await ctx.send(f"Enqueued {song}.")
 

@@ -32,7 +32,7 @@ class AudioPlayer:
 
     @property
     def is_playing(self) -> bool:
-        return self.voice_client and self.current_song
+        return bool(self.voice_client and self.current_song)
 
     def start_audio_player(self) -> None:
         self.audio_player = self.bot.loop.create_task(self.play_audio())

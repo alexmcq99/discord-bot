@@ -2,6 +2,7 @@ from collections.abc import Sequence
 from typing import Any, Optional, Type
 
 from sqlalchemy import asc, func, select
+from sqlalchemy import Date
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import aliased, sessionmaker
 from sqlalchemy.orm.attributes import InstrumentedAttribute
@@ -65,6 +66,27 @@ class UsageDatabase():
             data = result.all()
             return data
 
+    async def get_song_request_counts_by_date(self, filter_kwargs: dict[str, Any]):
+        song_request_counts = await self.get_counts_by_date(SongRequest, filter_kwargs)
+        return song_request_counts
+    
+    async def get_song_play_counts_by_date(self, filter_kwargs: dict[str, Any]):
+        song_play_counts = await self.get_counts_by_date(SongPlay, filter_kwargs)
+        return song_play_counts
+    
+    async def get_counts_by_date(self, table: type, filter_kwargs: dict[str, Any]):
+        async with self.async_session() as session:
+            dates_statement = (select(
+                func.date(table.timestamp, type_=Date).label("date"))
+                .filter_by(**filter_kwargs))
+            dates = aliased(dates_statement.subquery())
+            statement = (select(
+                dates.c.date,
+                func.count(dates.c.date).label("count"))
+                .group_by(dates.c.date))
+            counts = await session.execute(statement)
+            return counts.all()
+
     async def get_song_request_count(self, filter_kwargs: dict[str, Any]) -> int:
         song_request_count = await self.get_count(SongRequest, filter_kwargs)
         print("Times requested: ", song_request_count)
@@ -96,7 +118,6 @@ class UsageDatabase():
             request_timestamp = await session.scalar(timestamp_statement)
             request_statement = select(SongRequest).filter_by(timestamp = request_timestamp, **filter_kwargs)
             result = await session.scalars(request_statement)
-            print(result)
             request = result.first()
             return request
 

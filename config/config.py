@@ -21,6 +21,8 @@ class Config():
         self.data_dir: str = config_parser.get("Parameters", "DataDir", fallback="data")
         self.database_file_path: str = os.path.join(self.data_dir, self.DATABASE_FILE_NAME)
 
+        self.figure_dir: str = config_parser.get("Parameters", "FigureDir", fallback="figures")
+
         self.max_shown_songs: int = config_parser.getint("Parameters", "MaxShownSongs", fallback=10)
         self.spotify_song_limit = config_parser.getint("Parameters", "SpotifySongLimit", fallback=100)
         self.inactivity_timeout: int = config_parser.getint("Parameters", "InactivityTimeout", fallback=600)
