@@ -240,7 +240,7 @@ class MusicCog(commands.Cog):
         kwargs = await self.parse_stats_args(ctx, args)
         stats = await self.stats_factory.create_stats(ctx, **kwargs)
         await ctx.send(embed=stats.create_main_embed())
-        if stats.figure_filename:
+        if self.config.get_usage_graph_with_stats and stats.figure_filename:
             figure_file, embed = stats.create_figure_embed()
             # await ctx.send(embed=embed, file=figure_file)
             await ctx.send(file=figure_file)

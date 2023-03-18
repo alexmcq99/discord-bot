@@ -26,3 +26,5 @@ class Config():
         self.max_shown_songs: int = config_parser.getint("Parameters", "MaxShownSongs", fallback=10)
         self.spotify_song_limit = config_parser.getint("Parameters", "SpotifySongLimit", fallback=100)
         self.inactivity_timeout: int = config_parser.getint("Parameters", "InactivityTimeout", fallback=600)
+        
+        self.get_usage_graph_with_stats: bool = config_parser.getboolean("FeatureFlags", "GetUsageGraphWithFlags")

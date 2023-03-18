@@ -41,7 +41,7 @@ class Song:
     def total_seconds_played(self) -> float:
         seconds = self.time_played.total_seconds()
         if self.timestamp_last_played:
-            seconds += datetime.now() - self.timestamp_last_played
+            seconds += (datetime.now() - self.timestamp_last_played).total_seconds()
         return seconds
 
     def create_song_request(self) -> SongRequest:
