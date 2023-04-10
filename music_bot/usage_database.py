@@ -1,4 +1,5 @@
 from collections.abc import Sequence
+import os
 from typing import Any, Optional, Type
 
 from sqlalchemy import asc, func, select
@@ -23,20 +24,23 @@ class UsageDatabase():
         )
 
     async def initialize(self) -> None:
+        if not os.path.exists(self.config.data_dir):
+            os.makedirs(self.config.data_dir)
+            
         if self.reset_database:
             async with self.engine.begin() as conn:
                 await conn.run_sync(Base.metadata.drop_all)
 
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
+            Song.request_id_counter = self.get_next_id(SongRequest)
+            Song.play_id_counter = self.get_next_id(SongPlay)
 
+    async def get_next_id(self, table: type):
         async with self.async_session() as session:
-            max_request_id = await session.scalar(select(func.max(SongRequest.id)))
-            max_play_id = await session.scalar(select(func.max(SongPlay.id)))
-            if max_request_id > 0:
-                Song.request_id_counter = max_request_id + 1
-            if max_play_id > 0:
-                Song.play_id_counter = max_play_id + 1
+            max_id = await session.scalar(select(func.max(table.id)))
+            next_id = max_id + 1 if max_id else 0
+            return next_id
 
     async def insert_data(self, data: Base) -> None:
         async with self.async_session() as session:
