@@ -67,6 +67,7 @@ class MusicCog(commands.Cog):
     async def cog_before_invoke(self, ctx):
         print("Starting the cog")
         ctx.audio_player = self.get_audio_player(ctx.guild.id)
+        print(ctx.audio_player)
         return
 
     async def cog_after_invoke(self, ctx):
@@ -114,11 +115,13 @@ class MusicCog(commands.Cog):
             return
 
         ctx.audio_player.voice_client = await destination.connect()
+        print(ctx.audio_player.voice_client)
 
     @commands.command(name='leave', aliases=['disconnect', 'die'])
     async def leave(self, ctx: commands.Context):
         """Clears the queue and leaves the voice channel."""
 
+        print(ctx.audio_player.voice_client)
         if not ctx.audio_player.voice_client:
             return await ctx.send('Not connected to any voice channel.')
 

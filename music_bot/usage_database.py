@@ -16,6 +16,7 @@ from .usage_tables import Base, SongPlay, SongRequest
 
 class UsageDatabase():
     def __init__(self, config: Config):
+        self.config: Config = config
         self.reset_database: bool = config.reset_database
         connection_string = f"sqlite+aiosqlite:///{config.database_file_path}"
         self.engine = create_async_engine(connection_string)
@@ -33,8 +34,8 @@ class UsageDatabase():
 
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
-            Song.request_id_counter = self.get_next_id(SongRequest)
-            Song.play_id_counter = self.get_next_id(SongPlay)
+            Song.request_id_counter = await self.get_next_id(SongRequest)
+            Song.play_id_counter = await self.get_next_id(SongPlay)
 
     async def get_next_id(self, table: type):
         async with self.async_session() as session:
