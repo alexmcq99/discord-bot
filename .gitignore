@@ -35,3 +35,7 @@ test.py
 
 # Data files
 data/
+data2/
+figures/
+
+discord_bot_env_2.yml
