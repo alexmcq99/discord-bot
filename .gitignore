@@ -44,3 +44,6 @@ yakuza_0_karaoke_disco_songs.json
 data/
 data2/
 figures/
+
+# Test conda environments
+discord_bot_env_2.yml
