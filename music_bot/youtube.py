@@ -1,11 +1,11 @@
 import traceback
 from contextlib import suppress
-from discord.ext.commands import Context
+from discord.ext.commands import Bot, Context
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 from unidecode import unidecode
-from youtubesearchpython.__future__ import Playlist, Video, VideosSearch
+from yt_dlp import YoutubeDL
 
 from .time_utils import format_time_str, time_str_to_seconds
 
@@ -142,11 +142,30 @@ class YoutubeVideo():
 # TODO: Sometimes, youtube results from search queries randomly don't have streaming data, I may have to add retry logic to get it
 # Sometimes, youtube results from search queries have streaming data, but not the desired mime type. Add logic to get the best available stream.
 class YoutubeFactory:
-    def __init__(self) -> None:
+    YTDL_OPTIONS = {
+        'format': 'bestaudio/best',
+        'extractaudio': True,
+        'audioformat': 'opus',
+        'outtmpl': '%(extractor)s-%(id)s-%(title)s.%(ext)s',
+        'restrictfilenames': True,
+        'noplaylist': True,
+        'nocheckcertificate': True,
+        'ignoreerrors': False,
+        'logtostderr': False,
+        'quiet': True,
+        'no_warnings': True,
+        'default_search': 'auto',
+        'source_address': '0.0.0.0',
+    }
+        
+    def __init__(self, bot: Bot) -> None:
         self.ctx: Context = None
+        self.bot: Bot = bot
+        self.ytdl: YoutubeDL = YoutubeDL(self.YTDL_OPTIONS)
     
     async def create_yt_videos_from_yt_playlist_url(self, yt_playlist_url: str):
-        yt_playlist_data = await Playlist.getVideos(yt_playlist_url)
+        # yt_playlist_data = await Playlist.getVideos(yt_playlist_url)
+        yt_playlist_data = None
         if not yt_playlist_data:
             await self.ctx.send(f"Youtube playlist url \"{yt_playlist_url}\" did not yield any results.")
             return
@@ -186,13 +205,14 @@ class YoutubeFactory:
         return yt_video
     
     async def create_yt_video_from_id(self, yt_video_id: str):
-        yt_video_data = await Video.get(yt_video_id, timeout=REQUEST_TIMEOUT)
+        # yt_video_data = await Video.get(yt_video_id, timeout=REQUEST_TIMEOUT)
+        yt_video_data = await self.bot.loop.run_in_executor(None, self.ytdl.extract_info, yt_video_id, download=False)
         if not yt_video_data:
             await self.ctx.send(f"Youtube id \"{yt_video_id}\" did not yield any results.")
             return None
-        if not (await self.update_yt_video_streaming_data(yt_video_data)):
-            await self.ctx.send(f"**{yt_video_data['title']}** is not streamable.")
-            return None
+        # if not (await self.update_yt_video_streaming_data(yt_video_data)):
+        #     await self.ctx.send(f"**{yt_video_data['title']}** is not streamable.")
+        #     return None
         return YoutubeVideo(yt_video_data)
 
     async def update_yt_video_streaming_data(self, yt_video_data: dict[str, Any], tries=3) -> bool:
