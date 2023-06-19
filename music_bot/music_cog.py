@@ -268,47 +268,24 @@ class MusicCog(commands.Cog):
 
         ctx.audio_player.is_looping = not ctx.audio_player.is_looping
         await ctx.send(f"The queue is {'now' if ctx.audio_player.is_looping else 'no longer'} looping.")
-    
-    async def parse_play_args(self, ctx: commands.Context, args: tuple[str]):
-        if not args:
-            raise commands.UserInputError("No arguments provided. Please provide a url or search query.")
-        
-        kwargs = {
-            "yt_video_urls": [],
-            "yt_playlist_urls": [],
-            "spotify_urls": [],
-        }
-        found_url = False
-        for possible_url in args:
-            is_url = validators.url(possible_url)
-            found_url = found_url or is_url
-            if is_yt_video(possible_url):
-                kwargs["yt_video_urls"].append(possible_url)
-            elif is_yt_playlist(possible_url):
-                kwargs["yt_playlist_urls"].append(possible_url)
-            elif is_spotify_url(possible_url):
-                kwargs["spotify_urls"].append(possible_url)
-            elif validators.url(possible_url):
-                await ctx.send(f"Argument {possible_url} is structured like a url but is not a valid YouTube or Spotify url.")
-        if not found_url:
-            kwargs["yt_search_query"] = " ".join(args)
-        return kwargs
 
     @commands.command(name='play')
-    async def play(self, ctx: commands.Context, *args):
+    async def play(self, ctx: commands.Context, *, args: str):
         """Plays a song.
         If there are songs in the queue, this will be queued until the
         other songs finished playing.
         """
 
-        kwargs = await self.parse_play_args(ctx, args)
+        if not args:
+            raise commands.UserInputError("No arguments provided. Please provide a url or search query.")
+
         if not ctx.audio_player.voice_client:
             print("joining voice channel")
             await ctx.invoke(self.join)
         async with ctx.typing():
             if not ctx.audio_player.audio_player or ctx.audio_player.audio_player.done():
                 ctx.audio_player.start_audio_player()
-            async for song in self.song_factory.create_songs(ctx, **kwargs):
+            async for song in self.song_factory.create_songs(ctx, args):
                 await ctx.audio_player.song_queue.put(song)
                 await ctx.send(f"Enqueued {song}.")
 

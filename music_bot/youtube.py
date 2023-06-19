@@ -1,3 +1,4 @@
+import functools
 import traceback
 from contextlib import suppress
 from discord.ext.commands import Bot, Context
@@ -81,63 +82,23 @@ class YoutubePlaylist():
     #     return cls(playlist_data)
 
 class YoutubeVideo():
-    TARGET_MIME_TYPE = "audio/webm; codecs=\"opus\""
-
     def __init__(self, video_data: dict[str, Any]) -> None:
         print("creating yt object")
         self.video_id: str = video_data["id"]
-        self.video_url: str = video_data["link"]
+        self.video_url: str = video_data["webpage_url"]
         self.title: str = video_data["title"]
         self.video_link_markdown: str = f"[{self.title}]({self.video_url})"
 
-        self.channel_name: str = video_data["channel"]["name"]
-        self.channel_url: str = video_data["channel"]["link"]
+        self.channel_name: str = video_data["channel"]
+        self.channel_url: str = video_data["channel_url"]
         self.channel_link_markdown: str = f"[{self.channel_name}]({self.channel_url})"
 
-        self.thumbnail_url: str = video_data["thumbnails"][0]["url"]
+        self.thumbnail_url: str = video_data["thumbnail"]
 
-        duration = video_data["duration"]
-        self.duration: int = time_str_to_seconds(duration) if isinstance(duration, str) else int(duration["secondsText"])
+        self.duration: int = video_data["duration"]
         self.formatted_duration: str = format_time_str(self.duration)
         
-        streaming_data = video_data["streamingData"]
-        adaptive_formats = streaming_data["adaptiveFormats"]
-        target_streams = [stream for stream in adaptive_formats if stream["mimeType"] == self.TARGET_MIME_TYPE]
-        if not target_streams:
-            print(streaming_data)
-            print(adaptive_formats)
-            target_streams = [stream for stream in adaptive_formats if "audio" in stream["mimeType"] and "video" not in stream["mimeType"]]
-            print(target_streams)
-        best_stream = max(target_streams, key = lambda stream: stream["bitrate"])
-        self.stream_url: str = best_stream["url"]
-
-    # @classmethod
-    # async def from_search_query(cls, search_query: str):
-    #     try:
-    #         if not search_query:
-    #             return None
-    #         search = VideosSearch(unidecode(search_query), limit=1, timeout=REQUEST_TIMEOUT)
-    #         result = await search.next()
-    #         if not result or "result" not in result or len(result["result"]) == 0 or "id" not in result["result"][0]:
-    #             return None
-    #         video_data = result["result"][0]
-    #         video_formats = await Video.getFormats(video_data["id"], timeout=REQUEST_TIMEOUT)
-    #         video_data.update(video_formats)
-    #     except Exception as e:
-    #         traceback.print_exception(e)
-    #     return cls(video_data)
-
-    # @classmethod
-    # async def from_url(cls, url: str):
-    #     id = url_to_id(url)
-    #     return await YoutubeVideo.from_id(id)
-
-    # @classmethod
-    # async def from_id(cls, id: str):
-    #     video_data = await Video.get(id, timeout=REQUEST_TIMEOUT)
-    #     if not video_data or "id" not in video_data:
-    #         return None
-    #     return cls(video_data)
+        self.stream_url: str = video_data["url"]
 
 # TODO: Sometimes, youtube results from search queries randomly don't have streaming data, I may have to add retry logic to get it
 # Sometimes, youtube results from search queries have streaming data, but not the desired mime type. Add logic to get the best available stream.
@@ -162,6 +123,9 @@ class YoutubeFactory:
         self.ctx: Context = None
         self.bot: Bot = bot
         self.ytdl: YoutubeDL = YoutubeDL(self.YTDL_OPTIONS)
+
+    async def create_yt_videos(self, yt_args: str) -> list[YoutubeVideo]:
+        
     
     async def create_yt_videos_from_yt_playlist_url(self, yt_playlist_url: str):
         # yt_playlist_data = await Playlist.getVideos(yt_playlist_url)
@@ -206,7 +170,8 @@ class YoutubeFactory:
     
     async def create_yt_video_from_id(self, yt_video_id: str):
         # yt_video_data = await Video.get(yt_video_id, timeout=REQUEST_TIMEOUT)
-        yt_video_data = await self.bot.loop.run_in_executor(None, self.ytdl.extract_info, yt_video_id, download=False)
+        extract_info = functools.partial(self.ytdl.extract_info, yt_video_id, download=False)
+        yt_video_data = await self.bot.loop.run_in_executor(None, extract_info)
         if not yt_video_data:
             await self.ctx.send(f"Youtube id \"{yt_video_id}\" did not yield any results.")
             return None

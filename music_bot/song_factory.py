@@ -7,6 +7,7 @@ from config import Config
 
 from .song import Song
 from .spotify import SpotifyClientWrapper
+from .spotify import is_spotify_url
 from .usage_database import UsageDatabase
 from .youtube import YoutubeFactory, YoutubePlaylist, YoutubeVideo
 
@@ -18,14 +19,14 @@ class SongFactory:
         self.yt_factory = yt_factory
         self.spotify_client = SpotifyClientWrapper(config)
         
-    async def create_songs(
-            self, ctx: Context, *,
-            yt_search_query: str = None,
-            yt_video_urls: list[str] = [],
-            yt_playlist_urls: list[str] = [],
-            spotify_urls: list[str] = []) -> list[Song]:
+    async def create_songs(self, ctx: Context, play_cmd_args: str) -> list[Song]:
         self.ctx = ctx
         self.yt_factory.ctx = ctx
+
+        if is_spotify_url(play_cmd_args):
+            yt_args = await self.spotify_client.get_search_queries(play_cmd_args)
+        else:
+            yt_args = 
         if yt_search_query:
             yt_video = await self.yt_factory.create_yt_video_from_search_query(yt_search_query)
             song = await self.create_song(yt_video)

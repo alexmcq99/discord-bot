@@ -6,12 +6,12 @@ from asyncspotify import Client, ClientCredentialsFlow
 from config import Config
 
 
-def is_spotify_url(url):
-        # https://open.spotify.com/track/405HNEYKGDifuMcAZvqrqA?si=f38076221d0246b5
-        # https://open.spotify.com/album/643kxxjS5xPkzD4bR9vUn2?si=cuCeyEgYQm-pXKK7679ptQ
-        # https://open.spotify.com/playlist/6FkEOJ76LyyajBjOoGvGXT?si=6ba13d149a1b4d1c
-        pattern = re.compile(r"^https:\/\/open.spotify.com\/(?:track|album|playlist)\/[a-zA-Z0-9]+")
-        return pattern.match(url)
+def is_spotify_url(url) -> bool:
+    # https://open.spotify.com/track/405HNEYKGDifuMcAZvqrqA?si=f38076221d0246b5
+    # https://open.spotify.com/album/643kxxjS5xPkzD4bR9vUn2?si=cuCeyEgYQm-pXKK7679ptQ
+    # https://open.spotify.com/playlist/6FkEOJ76LyyajBjOoGvGXT?si=6ba13d149a1b4d1c
+    pattern = re.compile(r"^https:\/\/open.spotify.com\/(?:track|album|playlist)\/[a-zA-Z0-9]+")
+    return bool(pattern.match(url))
         
 def get_track_search_query(track):
     return f"{track.artists[0].name} - {track.name}"
