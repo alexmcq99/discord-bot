@@ -20,7 +20,7 @@ class MusicCog(commands.Cog):
         self.bot: commands.Bot = bot
         self.config: Config = config
         self.usage_db: UsageDatabase = UsageDatabase(config)
-        self.yt_factory: YoutubeFactory = YoutubeFactory()
+        self.yt_factory: YoutubeFactory = YoutubeFactory(bot)
         self.song_factory: SongFactory = SongFactory(config, self.usage_db, self.yt_factory)
         self.stats_factory: StatsFactory = StatsFactory(config, self.usage_db, self.yt_factory)
         self.audio_players: dict[int, AudioPlayer] = dict()

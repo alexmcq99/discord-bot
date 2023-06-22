@@ -24,29 +24,44 @@ class SongFactory:
         self.yt_factory.ctx = ctx
 
         if is_spotify_url(play_cmd_args):
-            yt_args = await self.spotify_client.get_search_queries(play_cmd_args)
+            yt_search_queries = await self.spotify_client.get_search_queries(play_cmd_args)
+            for query in yt_search_queries:
+                yt_video = await self.yt_factory.create_yt_videos(query)
+                song = await self.create_song(yt_video)
+                if song:
+                    yield song
         else:
-            yt_args = 
-        if yt_search_query:
-            yt_video = await self.yt_factory.create_yt_video_from_search_query(yt_search_query)
-            song = await self.create_song(yt_video)
-            if song: yield song
-        for yt_video_url in yt_video_urls:
-            yt_video = await self.yt_factory.create_yt_video_from_url(yt_video_url)
-            song = await self.create_song(yt_video)
-            if song: yield song
-        for yt_playlist_url in yt_playlist_urls:
-            async for yt_video in self.yt_factory.create_yt_videos_from_yt_playlist_url(yt_playlist_url):
-                song = await self.create_song(yt_video)
-                if song: yield song
-        for spotify_url in spotify_urls:
-            search_queries = await self.spotify_client.get_search_queries(spotify_url)
-            if not search_queries:
-                await self.ctx.send(f"Spotify url \"{spotify_url}\" did not yield any results.")
-            for yt_search_query in search_queries:
-                yt_video = await self.yt_factory.create_yt_video_from_search_query(yt_search_query)
-                song = await self.create_song(yt_video)
-                if song: yield song
+            yt_videos = await self.yt_factory.create_yt_videos(play_cmd_args)
+            if isinstance(yt_videos, YoutubeVideo):
+                song = await self.create_song(yt_videos)
+                if song:
+                    yield song
+            else:
+                for yt_video in yt_videos:
+                    song = await self.create_song(yt_video)
+                    if song:
+                        yield song
+
+        # if yt_search_query:
+        #     yt_video = await self.yt_factory.create_yt_video_from_search_query(yt_search_query)
+        #     song = await self.create_song(yt_video)
+        #     if song: yield song
+        # for yt_video_url in yt_video_urls:
+        #     yt_video = await self.yt_factory.create_yt_video_from_url(yt_video_url)
+        #     song = await self.create_song(yt_video)
+        #     if song: yield song
+        # for yt_playlist_url in yt_playlist_urls:
+        #     async for yt_video in self.yt_factory.create_yt_videos_from_yt_playlist_url(yt_playlist_url):
+        #         song = await self.create_song(yt_video)
+        #         if song: yield song
+        # for spotify_url in spotify_urls:
+        #     search_queries = await self.spotify_client.get_search_queries(spotify_url)
+        #     if not search_queries:
+        #         await self.ctx.send(f"Spotify url \"{spotify_url}\" did not yield any results.")
+        #     for yt_search_query in search_queries:
+        #         yt_video = await self.yt_factory.create_yt_video_from_search_query(yt_search_query)
+        #         song = await self.create_song(yt_video)
+        #         if song: yield song
 
     async def create_song(self, yt_video: YoutubeVideo) -> Song:
         if not yt_video:

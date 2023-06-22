@@ -111,7 +111,7 @@ class YoutubeFactory:
         'restrictfilenames': True,
         'noplaylist': True,
         'nocheckcertificate': True,
-        'ignoreerrors': False,
+        'ignoreerrors': True,
         'logtostderr': False,
         'quiet': True,
         'no_warnings': True,
@@ -124,70 +124,81 @@ class YoutubeFactory:
         self.bot: Bot = bot
         self.ytdl: YoutubeDL = YoutubeDL(self.YTDL_OPTIONS)
 
-    async def create_yt_videos(self, yt_args: str) -> list[YoutubeVideo]:
-        
-    
-    async def create_yt_videos_from_yt_playlist_url(self, yt_playlist_url: str):
-        # yt_playlist_data = await Playlist.getVideos(yt_playlist_url)
-        yt_playlist_data = None
-        if not yt_playlist_data:
-            await self.ctx.send(f"Youtube playlist url \"{yt_playlist_url}\" did not yield any results.")
-            return
-        if "videos" not in yt_playlist_data or not yt_playlist_data["videos"]:
-            await self.ctx.send(f"Youtube playlist at \"{yt_playlist_url}\" did not have any videos.")
-            return
-        found_streamable_video = False
-        for yt_video_data in yt_playlist_data["videos"]:
-            if not (await self.update_yt_video_streaming_data(yt_video_data)):
-                await self.ctx.send(f"**{yt_video_data['title']}** is not streamable. Skipping...")
-            else:
-                found_streamable_video = True
-                yield YoutubeVideo(yt_video_data)
-        if not found_streamable_video:
-            await self.ctx.send(f"Youtube playlist at \"{yt_playlist_url}\" did not have any streamable videos.")
-
-    async def create_yt_video_from_search_query(self, yt_search_query: str):
-        if not yt_search_query:
-            await self.ctx.send("Invalid youtube search query.")
-            return None
-        search = VideosSearch(unidecode(yt_search_query), limit=1, timeout=REQUEST_TIMEOUT)
-        result = await search.next()
-        if not result or not result["result"]:
-            await self.ctx.send(f"Youtube search \"{yt_search_query}\" did not yield any results.")
-            return None
-        yt_video_data = result["result"][0]
-        if not (await self.update_yt_video_streaming_data(yt_video_data)):
-            await self.ctx.send(f"**{yt_video_data['title']}** is not streamable.")
-            return None
-        return YoutubeVideo(yt_video_data)
-    
-    async def create_yt_video_from_url(self, yt_video_url: str):
-        yt_video_id = url_to_id(yt_video_url)
-        yt_video = await self.create_yt_video_from_id(yt_video_id)
-        if not yt_video:
-            await self.ctx.send(f"Youtube url \"{yt_video_url}\" did not yield any results.")
-        return yt_video
-    
-    async def create_yt_video_from_id(self, yt_video_id: str):
-        # yt_video_data = await Video.get(yt_video_id, timeout=REQUEST_TIMEOUT)
-        extract_info = functools.partial(self.ytdl.extract_info, yt_video_id, download=False)
+    async def create_yt_videos(self, yt_args: str) -> YoutubeVideo | list[YoutubeVideo]:
+        extract_info = functools.partial(self.ytdl.extract_info, yt_args, download=False)
         yt_video_data = await self.bot.loop.run_in_executor(None, extract_info)
         if not yt_video_data:
-            await self.ctx.send(f"Youtube id \"{yt_video_id}\" did not yield any results.")
             return None
-        # if not (await self.update_yt_video_streaming_data(yt_video_data)):
-        #     await self.ctx.send(f"**{yt_video_data['title']}** is not streamable.")
-        #     return None
-        return YoutubeVideo(yt_video_data)
 
-    async def update_yt_video_streaming_data(self, yt_video_data: dict[str, Any], tries=3) -> bool:
-        while tries > 0 and ("streamingData" not in yt_video_data or not yt_video_data["streamingData"]):
-            if tries < 3:
-                print("Had to try again")
-            streaming_data = await Video.getFormats(yt_video_data["id"], timeout=REQUEST_TIMEOUT)
-            yt_video_data.update(streaming_data)
-            tries -= 1
-        if tries == 0:
-            print("video data", yt_video_data)
-            print("streaming data: ", streaming_data)
-        return tries > 0
+        if 'entries' in yt_video_data:
+            if yt_video_data['extractor'] == 'youtube:search':
+                return YoutubeVideo(yt_video_data['entries'][0])
+            else:
+                return [YoutubeVideo(entry) for entry in yt_video_data['entries'] if entry]
+        else:
+            return YoutubeVideo(yt_video_data)
+    
+    # async def create_yt_videos_from_yt_playlist_url(self, yt_playlist_url: str):
+    #     # yt_playlist_data = await Playlist.getVideos(yt_playlist_url)
+    #     yt_playlist_data = None
+    #     if not yt_playlist_data:
+    #         await self.ctx.send(f"Youtube playlist url \"{yt_playlist_url}\" did not yield any results.")
+    #         return
+    #     if "videos" not in yt_playlist_data or not yt_playlist_data["videos"]:
+    #         await self.ctx.send(f"Youtube playlist at \"{yt_playlist_url}\" did not have any videos.")
+    #         return
+    #     found_streamable_video = False
+    #     for yt_video_data in yt_playlist_data["videos"]:
+    #         if not (await self.update_yt_video_streaming_data(yt_video_data)):
+    #             await self.ctx.send(f"**{yt_video_data['title']}** is not streamable. Skipping...")
+    #         else:
+    #             found_streamable_video = True
+    #             yield YoutubeVideo(yt_video_data)
+    #     if not found_streamable_video:
+    #         await self.ctx.send(f"Youtube playlist at \"{yt_playlist_url}\" did not have any streamable videos.")
+
+    # async def create_yt_video_from_search_query(self, yt_search_query: str):
+    #     if not yt_search_query:
+    #         await self.ctx.send("Invalid youtube search query.")
+    #         return None
+    #     search = VideosSearch(unidecode(yt_search_query), limit=1, timeout=REQUEST_TIMEOUT)
+    #     result = await search.next()
+    #     if not result or not result["result"]:
+    #         await self.ctx.send(f"Youtube search \"{yt_search_query}\" did not yield any results.")
+    #         return None
+    #     yt_video_data = result["result"][0]
+    #     if not (await self.update_yt_video_streaming_data(yt_video_data)):
+    #         await self.ctx.send(f"**{yt_video_data['title']}** is not streamable.")
+    #         return None
+    #     return YoutubeVideo(yt_video_data)
+    
+    # async def create_yt_video_from_url(self, yt_video_url: str):
+    #     yt_video_id = url_to_id(yt_video_url)
+    #     yt_video = await self.create_yt_video_from_id(yt_video_id)
+    #     if not yt_video:
+    #         await self.ctx.send(f"Youtube url \"{yt_video_url}\" did not yield any results.")
+    #     return yt_video
+    
+    # async def create_yt_video_from_id(self, yt_video_id: str):
+    #     # yt_video_data = await Video.get(yt_video_id, timeout=REQUEST_TIMEOUT)
+    #     extract_info = functools.partial(self.ytdl.extract_info, yt_video_id, download=False)
+    #     yt_video_data = await self.bot.loop.run_in_executor(None, extract_info)
+    #     if not yt_video_data:
+    #         await self.ctx.send(f"Youtube id \"{yt_video_id}\" did not yield any results.")
+    #         return None
+    #     # if not (await self.update_yt_video_streaming_data(yt_video_data)):
+    #     #     await self.ctx.send(f"**{yt_video_data['title']}** is not streamable.")
+    #     #     return None
+    #     return YoutubeVideo(yt_video_data)
+
+    # async def update_yt_video_streaming_data(self, yt_video_data: dict[str, Any], tries=3) -> bool:
+    #     while tries > 0 and ("streamingData" not in yt_video_data or not yt_video_data["streamingData"]):
+    #         if tries < 3:
+    #             print("Had to try again")
+    #         streaming_data = await Video.getFormats(yt_video_data["id"], timeout=REQUEST_TIMEOUT)
+    #         yt_video_data.update(streaming_data)
+    #         tries -= 1
+    #     if tries == 0:
+    #         print("video data", yt_video_data)
+    #         print("streaming data: ", streaming_data)
+    #     return tries > 0
