@@ -3,7 +3,6 @@ import itertools
 import math
 import random
 from datetime import datetime, timedelta
-from typing import Any
 
 import discord
 from discord.abc import Messageable
@@ -12,7 +11,7 @@ from discord.ext.commands import Context
 from config import Config
 
 from .usage_tables import SongPlay, SongRequest
-from .youtube import YoutubeVideo
+from .ytdl_wrapper import YtdlSource
 
 
 class Song:
@@ -23,15 +22,18 @@ class Song:
     request_id_counter = 0
     play_id_counter = 0
 
-    def __init__(self, config: Config, yt_video: YoutubeVideo, ctx: Context) -> None:
+    def __init__(self, config: Config, ytdl_source: YtdlSource, ctx: Context) -> None:
         self.config: Config = config
-        self.yt_video: YoutubeVideo = yt_video
+
         self.guild: discord.Guild = ctx.guild
         self.requester: discord.Member = ctx.author
         self.channel_where_requested: Messageable = ctx.channel
         self.timestamp_requested: datetime = datetime.now()
         self.timestamp_last_played: datetime = None
         self.time_played: timedelta = timedelta()
+
+        # Copy attributes from YTDLSource object
+        self.__dict__.update(ytdl_source.__dict__)
 
     @property
     def audio_source(self) -> discord.FFmpegOpusAudio:
@@ -68,13 +70,13 @@ class Song:
         return song_play
     
     def create_embed(self) -> discord.Embed:
-        return (discord.Embed(title="Current song:",
+        return (discord.Embed(title="Now playing:",
                 type="rich",
                 description=self.video_link_markdown,
                 color=discord.Color.random())
                 .add_field(name="Duration", value=self.formatted_duration)
                 .add_field(name="Requested by", value=self.requester.mention)
-                .add_field(name="Uploader", value=self.channel_link_markdown)
+                .add_field(name="Uploader", value=self.uploader_link_markdown)
                 .set_thumbnail(url=self.thumbnail_url))
 
     def record_stop(self):
@@ -85,10 +87,7 @@ class Song:
             self.timestamp_last_played = None
 
     def __str__(self):
-        return f":notes: **{self.title}** :notes: by **{self.channel_name}**"
-    
-    def __getattr__(self, __name) -> Any:
-        return getattr(self.yt_video, __name)
+        return f":notes: **{self.title}** :notes: by **{self.uploader_name}**"
 
 class SongQueue(asyncio.Queue):
     def __init__(self, max_shown_songs: int):

@@ -5,10 +5,10 @@ from datetime import datetime, timedelta
 import discord
 from discord.ext.commands import Context
 
-from .time_utils import format_datetime, format_time_str
+from .utils import format_datetime, format_time_str
 from .usage_database import UsageDatabase
 from .usage_tables import SongRequest
-from .youtube import YoutubeFactory
+from .ytdl_wrapper import YtdlWrapper
 
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
@@ -43,10 +43,10 @@ class Stats:
         return figure_file, embed
 
 class StatsFactory:
-    def __init__(self, config: Config, usage_db: UsageDatabase, yt_factory: YoutubeFactory) -> None:
+    def __init__(self, config: Config, usage_db: UsageDatabase, ytdl_wrapper: YtdlWrapper) -> None:
         self.config = config
         self.usage_db: UsageDatabase = usage_db
-        self.yt_factory: YoutubeFactory = yt_factory
+        self.ytdl_wrapper: YtdlWrapper = ytdl_wrapper
 
         self.ctx: Context = None
         self.filter_kwargs: dict[str, Any] = None
@@ -54,24 +54,21 @@ class StatsFactory:
     async def create_stats(
             self, ctx: Context, *,
             user: Optional[discord.Member] = None,
-            yt_search_query: Optional[str] = None,
-            yt_video_url: Optional[str] = None) -> Stats:
+            ytdl_args: Optional[str] = None) -> Stats:
         
         self.ctx = ctx
         self.filter_kwargs = {
             "guild_id": ctx.guild.id
         }
 
-        yt_video = None
-        if yt_search_query:
-            yt_video = await self.yt_factory.create_yt_video_from_search_query(yt_search_query)
-        elif yt_video_url:
-            yt_video = await self.yt_factory.create_yt_video_from_url(yt_video_url)
+        ytdl_source = None
+        if ytdl_args:
+            ytdl_source = await anext(self.ytdl_wrapper.create_ytdl_sources(ytdl_args))
         
         if user:
             self.filter_kwargs["requester_id"] = user.id
-        if yt_video:
-            self.filter_kwargs["song_id"] = yt_video.video_id
+        if ytdl_source:
+            self.filter_kwargs["song_id"] = ytdl_source.video_id
 
         stats_dict = {
             "Requests": await self.usage_db.get_song_request_count(self.filter_kwargs),
@@ -83,20 +80,21 @@ class StatsFactory:
 
         if not user:
             stats_dict["Most Frequent Requester"] = await self.get_most_frequent_requester_formatted()
-        if not yt_video:
+        if not ytdl_source:
             stats_dict["Most Requested Song"] = await self.get_most_requested_song_formatted()
         
-        if user and yt_video:
+        if user and ytdl_source:
             embed_title = "User/Song Stats:"
-            embed_description = f"{user.mention} and {yt_video.video_link_markdown}"
+            embed_description = f"{user.mention} and {ytdl_source.video_link_markdown}"
+            thumbnail_url = user.avatar.url
         elif user:
             embed_title = "User Stats:"
             embed_description = user.mention
             thumbnail_url = user.avatar.url
-        elif yt_video:
+        elif ytdl_source:
             embed_title = "Song Stats:"
-            embed_description = yt_video.video_link_markdown
-            thumbnail_url = yt_video.thumbnail_url
+            embed_description = ytdl_source.video_link_markdown
+            thumbnail_url = ytdl_source.thumbnail_url
         else:
             embed_title = "Server Stats:"
             embed_description = ctx.guild.name
@@ -140,8 +138,8 @@ class StatsFactory:
             requester = self.ctx.guild.get_member(request.requester_id)
             formatted_request += f", by {requester.mention}"
         if "song_id" not in self.filter_kwargs:
-            yt_video = await self.yt_factory.create_yt_video_from_id(request.song_id)
-            formatted_request += f", requesting {yt_video.video_link_markdown}"
+            ytdl_source = await anext(self.ytdl_wrapper.create_ytdl_sources(request.song_id))
+            formatted_request += f", requesting {ytdl_source.video_link_markdown}"
         return formatted_request
 
     async def get_most_frequent_requester_formatted(self) -> str:
@@ -156,8 +154,8 @@ class StatsFactory:
         song_id, request_count = await self.usage_db.get_most_requested_song(self.filter_kwargs)
         if not song_id or not request_count:
             return "N/A"
-        yt_video = await self.yt_factory.create_yt_video_from_id(song_id)
-        formatted = f"{yt_video.video_link_markdown} with {request_count} request{'s' if request_count > 1 else ''}"
+        ytdl_source = await anext(self.ytdl_wrapper.create_ytdl_sources(song_id))
+        formatted = f"{ytdl_source.video_link_markdown} with {request_count} request{'s' if request_count > 1 else ''}"
         return formatted
 
     async def create_figure(self) -> str:

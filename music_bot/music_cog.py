@@ -2,17 +2,17 @@ import asyncio
 import re
 import traceback
 
-import validators
+from asyncspotify import SpotifyException
 from discord.ext import commands
+from yt_dlp.utils import YoutubeDLError
 
 from config import Config
 
 from .audio_player import AudioPlayer
 from .song_factory import SongFactory
-from .spotify import is_spotify_url
 from .stats import StatsFactory
 from .usage_database import UsageDatabase
-from .youtube import is_yt_playlist, is_yt_video, YoutubeFactory
+from .ytdl_wrapper import YtdlWrapper
 
 
 class MusicCog(commands.Cog):
@@ -20,9 +20,9 @@ class MusicCog(commands.Cog):
         self.bot: commands.Bot = bot
         self.config: Config = config
         self.usage_db: UsageDatabase = UsageDatabase(config)
-        self.yt_factory: YoutubeFactory = YoutubeFactory(bot)
-        self.song_factory: SongFactory = SongFactory(config, self.usage_db, self.yt_factory)
-        self.stats_factory: StatsFactory = StatsFactory(config, self.usage_db, self.yt_factory)
+        self.ytdl_wrapper: YtdlWrapper = YtdlWrapper(bot)
+        self.song_factory: SongFactory = SongFactory(config, self.usage_db, self.ytdl_wrapper)
+        self.stats_factory: StatsFactory = StatsFactory(config, self.usage_db, self.ytdl_wrapper)
         self.audio_players: dict[int, AudioPlayer] = dict()
         self.default_reaction: str = "✅"
         self.reactions: dict[str, str] = {
@@ -79,13 +79,19 @@ class MusicCog(commands.Cog):
         await ctx.message.add_reaction(self.reactions.get(ctx.command.name, self.default_reaction))
     
     @commands.Cog.listener()
-    async def on_command_error(self, ctx: commands.Context, error: commands.CommandError):
+    async def on_command_error(self, ctx: commands.Context, error: Exception):
+        print(type(error))
         if isinstance(error, commands.CommandNotFound):
             await ctx.send(f"Command not found. Type \"-help\" to see the list of valid commands.")
         elif isinstance(error, commands.UserInputError):
             await ctx.send(f"Bad user input received: {str(error)}")
+        elif isinstance(error, YoutubeDLError):
+            await ctx.send(f"YoutubeDL threw an error with the following message: {str(error)}")
+        elif isinstance(error, SpotifyException):
+            await ctx.send(f"Encountered an error when getting Spotify data. Please check if the given Spotify url is valid.")
         else:
-            await ctx.send(f"An error occurred in {ctx.command.name}: {str(error)}")
+            await ctx.send(f"An unexpected error occurred in {ctx.command.name}: {str(error)}")
+        
         traceback.print_exception(error)
     
     @commands.command(name='clear')
@@ -208,32 +214,18 @@ class MusicCog(commands.Cog):
         if not args:
             return kwargs
         
-        index = 0
-        possible_user_mention = args[index]
-        # await ctx.send(possible_user_mention)
-        pattern = r"<|!|@|>" # <@1293190231243>
-        user_id_str = re.sub(pattern, "", possible_user_mention)
-        if user_id_str.isdigit():
-            user_id = int(user_id_str)
+        possible_user_mention = args[0]
+        user_mention_pattern = r"<!?@(\d+)>" # <@1293190231243>, <!@1293190231243>
+        if match := re.match(user_mention_pattern, possible_user_mention):
+            user_id = int(match.group(1))
             user = ctx.guild.get_member(user_id)
             if user:
-                kwargs["user"] = user
-                index += 1
+                kwargs['user'] = user
                 print(f"Found user mention: {possible_user_mention}")
-                if index == len(args):
-                    return kwargs
 
-        possible_url = args[index]
-        if is_yt_video(possible_url):
-            kwargs["yt_video_url"] = possible_url
-            print("Found Youtube url: ", possible_url)
-            if index + 1 < len(args):
-                print(f"Ignoring arguments: {args[index + 1:]}")
-        elif validators.url(possible_url):
-            raise commands.BadArgument(f"Argument {possible_url} is structured like a url but is not a valid YouTube url.")
-        else:
-            kwargs["yt_search_query"] = " ".join(args[index:])
-            print(f"Found Youtube search query: {kwargs['yt_search_query']}")
+        if len(args) > 1:
+            kwargs['ytdl_args'] = ' '.join(args[1:])
+
         return kwargs
 
     @commands.command(name='stats')
@@ -275,7 +267,7 @@ class MusicCog(commands.Cog):
         If there are songs in the queue, this will be queued until the
         other songs finished playing.
         """
-
+        print('Type of args:', type(args))
         if not args:
             raise commands.UserInputError("No arguments provided. Please provide a url or search query.")
 

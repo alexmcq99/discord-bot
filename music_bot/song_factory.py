@@ -1,71 +1,35 @@
-import asyncio
-import traceback
-
-from discord.ext.commands import Context
-
 from config import Config
+from discord.ext.commands import Context
+from typing import Any, AsyncIterator
 
 from .song import Song
-from .spotify import SpotifyClientWrapper
-from .spotify import is_spotify_url
+from .spotify_wrapper import SpotifyWrapper
 from .usage_database import UsageDatabase
-from .youtube import YoutubeFactory, YoutubePlaylist, YoutubeVideo
-
+from .utils import is_spotify_url
+from .ytdl_wrapper import YtdlWrapper
 
 class SongFactory:
-    def __init__(self, config: Config, usage_db: UsageDatabase, yt_factory: YoutubeFactory) -> None:
+    def __init__(self, config: Config, usage_db: UsageDatabase, ytdl_wrapper: YtdlWrapper) -> None:
         self.config: Config = config
+        self.ytdl_wrapper: YtdlWrapper = ytdl_wrapper
         self.usage_db: UsageDatabase = usage_db
-        self.yt_factory = yt_factory
-        self.spotify_client = SpotifyClientWrapper(config)
+        self.ctx: Context = None
+        self.spotify_wrapper = SpotifyWrapper(config.spotipy_client_id, config.spotipy_client_secret)
         
-    async def create_songs(self, ctx: Context, play_cmd_args: str) -> list[Song]:
+    async def create_songs(self, ctx: Context, play_cmd_args: str) -> AsyncIterator[Song]:
         self.ctx = ctx
-        self.yt_factory.ctx = ctx
-
         if is_spotify_url(play_cmd_args):
-            yt_search_queries = await self.spotify_client.get_search_queries(play_cmd_args)
+            yt_search_queries = await self.spotify_wrapper.get_search_queries(play_cmd_args)
             for query in yt_search_queries:
-                yt_video = await self.yt_factory.create_yt_videos(query)
-                song = await self.create_song(yt_video)
-                if song:
+                async for ytdl_source in self.ytdl_wrapper.create_ytdl_sources(query):
+                    song = await self.create_song(ytdl_source)
                     yield song
         else:
-            yt_videos = await self.yt_factory.create_yt_videos(play_cmd_args)
-            if isinstance(yt_videos, YoutubeVideo):
-                song = await self.create_song(yt_videos)
-                if song:
-                    yield song
-            else:
-                for yt_video in yt_videos:
-                    song = await self.create_song(yt_video)
-                    if song:
-                        yield song
+            async for ytdl_source in self.ytdl_wrapper.create_ytdl_sources(play_cmd_args):
+                song = await self.create_song(ytdl_source)
+                yield song
 
-        # if yt_search_query:
-        #     yt_video = await self.yt_factory.create_yt_video_from_search_query(yt_search_query)
-        #     song = await self.create_song(yt_video)
-        #     if song: yield song
-        # for yt_video_url in yt_video_urls:
-        #     yt_video = await self.yt_factory.create_yt_video_from_url(yt_video_url)
-        #     song = await self.create_song(yt_video)
-        #     if song: yield song
-        # for yt_playlist_url in yt_playlist_urls:
-        #     async for yt_video in self.yt_factory.create_yt_videos_from_yt_playlist_url(yt_playlist_url):
-        #         song = await self.create_song(yt_video)
-        #         if song: yield song
-        # for spotify_url in spotify_urls:
-        #     search_queries = await self.spotify_client.get_search_queries(spotify_url)
-        #     if not search_queries:
-        #         await self.ctx.send(f"Spotify url \"{spotify_url}\" did not yield any results.")
-        #     for yt_search_query in search_queries:
-        #         yt_video = await self.yt_factory.create_yt_video_from_search_query(yt_search_query)
-        #         song = await self.create_song(yt_video)
-        #         if song: yield song
-
-    async def create_song(self, yt_video: YoutubeVideo) -> Song:
-        if not yt_video:
-            return None
-        song = Song(self.config, yt_video, self.ctx)
+    async def create_song(self, ytdl_data: dict[str, Any]) -> Song:
+        song = Song(self.config, ytdl_data, self.ctx)
         await self.usage_db.insert_data(song.create_song_request())
         return song
