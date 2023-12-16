@@ -48,7 +48,7 @@ class AudioPlayer:
                     self.bot.loop.create_task(self.stop())
                     return
                 
-                print("about to play song")
+                print(f"about to play song: {self.current_song}")
                 self.current_song.timestamp_last_played = datetime.now()
                 self.voice_client.play(self.current_song.audio_source, after=self.play_next_song)
                 print(f"Sending embed")
