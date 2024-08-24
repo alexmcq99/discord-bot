@@ -108,7 +108,7 @@ class MusicCog(commands.Cog):
     async def on_voice_state_update(self, member, before, after):
         if after.channel is None:
             audio_player = self.get_audio_player(before.channel.guild.id)
-            if len(before.channel.voice_states) <= 1:
+            if audio_player.voice_client and before.channel.id == audio_player.voice_client.channel.id and len(before.channel.voice_states) <= 1:
                 await audio_player.stop()
     
     @commands.command(name='join', aliases=['summon'], invoke_without_subcommand=True)
@@ -274,10 +274,10 @@ class MusicCog(commands.Cog):
                 ctx.audio_player.start_audio_player()
             async for song in self.song_factory.create_songs(ctx, args):
                 if play_next:
-                    await ctx.audio_player.song_queue.put_left(song)
+                    ctx.audio_player.song_queue.put_left_nowait(song)
                     await ctx.send(f"Playing {song} next.")
                 else:
-                    await ctx.audio_player.song_queue.put(song)
+                    ctx.audio_player.song_queue.put_nowait(song)
                     await ctx.send(f"Enqueued {song}.")
                     
     @commands.command(name='play')

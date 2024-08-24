@@ -111,7 +111,7 @@ class SongQueue(asyncio.Queue):
                 ).set_footer(text=f"Viewing page {page}/{pages}"))
         return embed
     
-    def put_left(self, item):
+    def put_left_nowait(self, item):
         if self.full():
             raise asyncio.QueueFull
         self._queue.appendleft(item)
