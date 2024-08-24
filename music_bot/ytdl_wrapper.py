@@ -14,9 +14,9 @@ class YtdlSource():
         self.title: str = ytdl_data['title']
         self.video_link_markdown: str = f'[{self.title}]({self.video_url})'
 
-        self.uploader_name: str = ytdl_data.get('uploader', ytdl_data['channel'])
-        self.uploader_url: str = ytdl_data.get('uploader_url', ytdl_data['channel_url'])
-        self.uploader_link_markdown: str = f'[{self.uploader_name}]({self.uploader_url})'
+        self.uploader_name: str = ytdl_data.get('channel') or ytdl_data.get('uploader')
+        self.uploader_url: str = ytdl_data.get('channel_url') or ytdl_data.get('uploader_url')
+        self.uploader_link_markdown: str = f'[{self.uploader_name}]({self.uploader_url})' if self.uploader_url else self.uploader_name
 
         self.thumbnail_url: str = ytdl_data['thumbnail']
 

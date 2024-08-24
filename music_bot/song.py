@@ -111,6 +111,14 @@ class SongQueue(asyncio.Queue):
                 ).set_footer(text=f"Viewing page {page}/{pages}"))
         return embed
     
+    def put_left_nowait(self, item):
+        if self.full():
+            raise asyncio.QueueFull
+        self._queue.appendleft(item)
+        self._unfinished_tasks += 1
+        self._finished.clear()
+        self._wakeup_next(self._getters)
+    
     def __getitem__(self, item):
         if isinstance(item, slice):
             return list(itertools.islice(self._queue, item.start, item.stop, item.step))

@@ -30,6 +30,7 @@ music/
 # Logging
 log.txt
 error.txt
+logs/
 
 # Testing
 app.py
@@ -40,6 +41,7 @@ baka_mitai.json
 baka_mitai_search.json
 yakuza_0_karaoke_disco_songs.json
 result.json
+test.json
 
 # Data files
 data/

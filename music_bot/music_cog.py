@@ -108,7 +108,7 @@ class MusicCog(commands.Cog):
     async def on_voice_state_update(self, member, before, after):
         if after.channel is None:
             audio_player = self.get_audio_player(before.channel.guild.id)
-            if len(before.channel.voice_states) <= 1:
+            if audio_player.voice_client and before.channel.id == audio_player.voice_client.channel.id and len(before.channel.voice_states) <= 1:
                 await audio_player.stop()
     
     @commands.command(name='join', aliases=['summon'], invoke_without_subcommand=True)
@@ -261,12 +261,7 @@ class MusicCog(commands.Cog):
         ctx.audio_player.is_looping = not ctx.audio_player.is_looping
         await ctx.send(f"The queue is {'now' if ctx.audio_player.is_looping else 'no longer'} looping.")
 
-    @commands.command(name='play')
-    async def play(self, ctx: commands.Context, *, args: str):
-        """Plays a song.
-        If there are songs in the queue, this will be queued until the
-        other songs finished playing.
-        """
+    async def _play(self, ctx: commands.Context, args: str, play_next : bool = False):
         print('Type of args:', type(args))
         if not args:
             raise commands.UserInputError("No arguments provided. Please provide a url or search query.")
@@ -278,8 +273,26 @@ class MusicCog(commands.Cog):
             if not ctx.audio_player.audio_player or ctx.audio_player.audio_player.done():
                 ctx.audio_player.start_audio_player()
             async for song in self.song_factory.create_songs(ctx, args):
-                await ctx.audio_player.song_queue.put(song)
-                await ctx.send(f"Enqueued {song}.")
+                if play_next:
+                    ctx.audio_player.song_queue.put_left_nowait(song)
+                    await ctx.send(f"Playing {song} next.")
+                else:
+                    ctx.audio_player.song_queue.put_nowait(song)
+                    await ctx.send(f"Enqueued {song}.")
+                    
+    @commands.command(name='play')
+    async def play(self, ctx: commands.Context, *, args: str):
+        """Plays a song.
+        If there are other songs in the queue, this song will be added after them.
+        """
+        await self._play(ctx, args)
+
+    @commands.command(name='playnext')
+    async def playnext(self, ctx: commands.Context, *, args: str):
+        """Plays a song next.
+        If there are other songs in the queue, this song will take priority and will be played before them.
+        """
+        await self._play(ctx, args, play_next = True)
 
     @join.before_invoke
     @play.before_invoke
