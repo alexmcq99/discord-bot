@@ -15,14 +15,14 @@ This token will be loaded and used by `app.py`.
 ### Set up Miniconda environment
 
 1. Install [Miniconda](https://docs.conda.io/en/latest/miniconda.html) if not already installed
-2. Create a conda environment from `discord_bot_env.yml`
+2. Create a conda environment from `discord_bot_env.yaml`
 
-    `conda env create -f discord_bot_env.yml`
+    `conda env create -f discord_bot_env.yaml`
 
     This will create a new conda environment called `discord_bot_env` containing all necessary packages.
 3. Activate the conda environment with `conda activate discord_bot_env`
 
-After these steps, your dev environment should be good to go.  Run `python app.py` and look to see if your discord bot is online on any servers you've added it to.  Running commands in any text channel of a discord server of which the bot is a member should work.
+After these steps, your dev environment should be good to go.  Run `python run_bot.py` and look to see if your discord bot is online on any servers you've added it to.  Running commands in any text channel of a discord server of which the bot is a member should work.
 
 ## Overview of Functionality
 

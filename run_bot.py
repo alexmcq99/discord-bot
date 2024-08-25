@@ -8,7 +8,7 @@ from config import Config
 from music_bot import MusicCog
 
 # Load config
-config_path = os.path.join("config", "config.ini")
+config_path = os.path.join("config", "config.yaml")
 config = Config(config_path)
 
 # Make bot
