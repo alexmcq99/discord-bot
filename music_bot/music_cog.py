@@ -37,7 +37,8 @@ class MusicCog(commands.Cog):
             "now": "✅",
             "queue": "✅",
             "shuffle": "🔀",
-            "remove": "❌"
+            "remove": "❌",
+            "slap": "😱"
         }
 
     def get_audio_player(self, guild_id: int) -> AudioPlayer:
@@ -249,7 +250,13 @@ class MusicCog(commands.Cog):
 
         ctx.audio_player.song_queue.remove(index - 1)
 
-    @commands.command(name='loop')
+    @commands.command(name='slap', aliases=['punch'])
+    async def slap(self, ctx: commands.Context):
+        """Slap the bot.
+        """
+        await ctx.send("Ouch! 😱\nPlease don't hit me!")
+
+    @commands.command(name='loop', aliases=['repeat'])
     async def loop(self, ctx: commands.Context):
         """Loops the queue.
         Invoke this command again to unloop the queue.
