@@ -8,7 +8,7 @@ from discord.ext.commands import Context
 from .utils import format_datetime, format_time_str
 from .usage_database import UsageDatabase
 from .usage_tables import SongRequest
-from .ytdl_wrapper import YtdlWrapper
+from .ytdl_source import YtdlSourceFactory
 
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
@@ -43,10 +43,10 @@ class Stats:
         return figure_file, embed
 
 class StatsFactory:
-    def __init__(self, config: Config, usage_db: UsageDatabase, ytdl_wrapper: YtdlWrapper) -> None:
+    def __init__(self, config: Config, usage_db: UsageDatabase, ytdl_source_factory: YtdlSourceFactory) -> None:
         self.config = config
         self.usage_db: UsageDatabase = usage_db
-        self.ytdl_wrapper: YtdlWrapper = ytdl_wrapper
+        self.ytdl_source_factory: YtdlSourceFactory = ytdl_source_factory
 
         self.ctx: Context = None
         self.filter_kwargs: dict[str, Any] = None
@@ -63,7 +63,7 @@ class StatsFactory:
 
         ytdl_source = None
         if ytdl_args:
-            ytdl_source = await anext(self.ytdl_wrapper.create_ytdl_sources(ytdl_args))
+            ytdl_source = await anext(self.ytdl_source_factory.create_ytdl_sources(ytdl_args))
         
         if user:
             self.filter_kwargs["requester_id"] = user.id
@@ -138,7 +138,7 @@ class StatsFactory:
             requester = self.ctx.guild.get_member(request.requester_id)
             formatted_request += f", by {requester.mention}"
         if "song_id" not in self.filter_kwargs:
-            ytdl_source = await anext(self.ytdl_wrapper.create_ytdl_sources(request.song_id))
+            ytdl_source = await anext(self.ytdl_source_factory.create_ytdl_sources(request.song_id))
             formatted_request += f", requesting {ytdl_source.video_link_markdown}"
         return formatted_request
 
@@ -154,7 +154,7 @@ class StatsFactory:
         song_id, request_count = await self.usage_db.get_most_requested_song(self.filter_kwargs)
         if not song_id or not request_count:
             return "N/A"
-        ytdl_source = await anext(self.ytdl_wrapper.create_ytdl_sources(song_id))
+        ytdl_source = await anext(self.ytdl_source_factory.create_ytdl_sources(song_id))
         formatted = f"{ytdl_source.video_link_markdown} with {request_count} request{'s' if request_count > 1 else ''}"
         return formatted
 

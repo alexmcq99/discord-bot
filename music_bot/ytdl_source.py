@@ -1,3 +1,6 @@
+import asyncio
+import functools
+
 from discord.ext import commands
 from typing import Any, AsyncIterator
 
@@ -25,7 +28,7 @@ class YtdlSource():
         
         self.stream_url: str = ytdl_data['url']
 
-class YtdlWrapper:
+class YtdlSourceFactory:
     YTDL_OPTIONS = {
         'format': 'bestaudio/best',
         'extractaudio': True,
@@ -47,20 +50,29 @@ class YtdlWrapper:
         self.bot: commands.Bot = bot
         self.ytdl: YoutubeDL = YoutubeDL(self.YTDL_OPTIONS)
 
-    async def create_ytdl_sources(self, ytdl_args: str) -> AsyncIterator[YtdlSource]:
+    async def create_ytdl_sources(self, ytdl_args: str) -> (YtdlSource | list[YtdlSource]):
         print('ytdl_args: ', ytdl_args)
-        ytdl_data = await self.bot.loop.run_in_executor(None, self.ytdl.extract_info, ytdl_args, False)
+        partial_func = functools.partial(self.ytdl.extract_info, ytdl_args, download=False, process=True)
+        ytdl_data = await self.bot.loop.run_in_executor(None, partial_func)
         print(ytdl_data)
 
-        is_playlist_or_yt_search = ytdl_data.get('_type') == 'playlist'
-        if is_playlist_or_yt_search:
-            # Youtube search will always return a playlist with 1 entry
-            for entry in ytdl_data['entries']:
-                try:
-                    entry_ytdl_data = await self.bot.loop.run_in_executor(None, self.ytdl.extract_info, entry['id'], False)
-                    yield YtdlSource(entry_ytdl_data)
-                except YoutubeDLError:
-                    pass
-        else:
-            # Single video
-            yield YtdlSource(ytdl_data)
+        # Youtube search will always return a playlist with 1 entry
+        if ytdl_data.get('_type') == 'playlist' and len(ytdl_data.get('entries')) == 1:
+            entry = ytdl_data['entries'][0]
+            ytdl_source = await self.create_ytdl_source(entry["id"])
+            return ytdl_source
+        elif ytdl_data.get('_type') == 'playlist': # Playlist with multiple videos
+            ytdl_tasks = [self.create_ytdl_source(entry["id"]) for entry in ytdl_data['entries']]
+            ytdl_sources = await asyncio.gather(*ytdl_tasks)
+            return ytdl_sources
+        else: # Single video
+            ytdl_source = YtdlSource(ytdl_data)
+            return ytdl_source
+    
+    async def create_ytdl_source(self, yt_video_id: str) -> YtdlSource:
+        try:
+            partial_func = functools.partial(self.ytdl.extract_info, yt_video_id, download=False, process=True)
+            entry_ytdl_data = await self.bot.loop.run_in_executor(None, partial_func)
+            return YtdlSource(entry_ytdl_data)
+        except YoutubeDLError as e:
+            print(f"Encountered YTDL error: {e}")

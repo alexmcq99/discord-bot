@@ -24,18 +24,18 @@ class AudioPlayer:
         self.song_queue: SongQueue[Song] = SongQueue(config.max_shown_songs)
         self.is_looping: bool = False
         self.play_next_song_event: asyncio.Event = asyncio.Event()
-        self.audio_player: asyncio.Task = None
+        self.audio_player_task: asyncio.Task = None
 
     def __del__(self):
-        if self.audio_player:
-            self.audio_player.cancel()
+        if self.audio_player_task:
+            self.audio_player_task.cancel()
 
     @property
     def is_playing(self) -> bool:
         return bool(self.voice_client and self.current_song)
 
     def start_audio_player(self) -> None:
-        self.audio_player = self.bot.loop.create_task(self.play_audio())
+        self.audio_player_task = self.bot.loop.create_task(self.play_audio())
     
     async def play_audio(self) -> None:
         try:

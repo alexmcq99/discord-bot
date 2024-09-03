@@ -1,4 +1,5 @@
 import asyncio
+import discord
 import re
 import traceback
 
@@ -9,10 +10,11 @@ from yt_dlp.utils import YoutubeDLError
 from config import Config
 
 from .audio_player import AudioPlayer
+from .song import Song
 from .song_factory import SongFactory
 from .stats import StatsFactory
 from .usage_database import UsageDatabase
-from .ytdl_wrapper import YtdlWrapper
+from .ytdl_source import YtdlSourceFactory
 
 
 class MusicCog(commands.Cog):
@@ -20,9 +22,9 @@ class MusicCog(commands.Cog):
         self.bot: commands.Bot = bot
         self.config: Config = config
         self.usage_db: UsageDatabase = UsageDatabase(config)
-        self.ytdl_wrapper: YtdlWrapper = YtdlWrapper(bot)
-        self.song_factory: SongFactory = SongFactory(config, self.usage_db, self.ytdl_wrapper)
-        self.stats_factory: StatsFactory = StatsFactory(config, self.usage_db, self.ytdl_wrapper)
+        self.ytdl_source_factory: YtdlSourceFactory = YtdlSourceFactory(bot)
+        self.song_factory: SongFactory = SongFactory(config, self.usage_db, self.ytdl_source_factory)
+        self.stats_factory: StatsFactory = StatsFactory(config, self.usage_db, self.ytdl_source_factory)
         self.audio_players: dict[int, AudioPlayer] = dict()
         self.default_reaction: str = "✅"
         self.reactions: dict[str, str] = {
@@ -74,7 +76,7 @@ class MusicCog(commands.Cog):
     async def cog_after_invoke(self, ctx):
         print("Stopping the cog")
         try:
-            print(f"Exception in audio player: {ctx.audio_player.audio_player.exception()}")
+            print(f"Exception in audio player: {ctx.audio_player.audio_player_task.exception()}")
         except Exception as e:
             print("Exception when printing exception: ", str(e))
         await ctx.message.add_reaction(self.reactions.get(ctx.command.name, self.default_reaction))
@@ -277,15 +279,33 @@ class MusicCog(commands.Cog):
             print("joining voice channel")
             await ctx.invoke(self.join)
         async with ctx.typing():
-            if not ctx.audio_player.audio_player or ctx.audio_player.audio_player.done():
+            if not ctx.audio_player.audio_player_task or ctx.audio_player.audio_player_task.done():
                 ctx.audio_player.start_audio_player()
-            async for song in self.song_factory.create_songs(ctx, args):
+            
+            result = await self.song_factory.create_songs(ctx, args)
+            if isinstance(result, Song):
                 if play_next:
-                    ctx.audio_player.song_queue.put_left_nowait(song)
-                    await ctx.send(f"Playing {song} next.")
+                    ctx.audio_player.song_queue.put_left_nowait(result)
+                    await ctx.send(f"Playing {result} next.")
                 else:
-                    ctx.audio_player.song_queue.put_nowait(song)
-                    await ctx.send(f"Enqueued {song}.")
+                    ctx.audio_player.song_queue.put_nowait(result)
+                    await ctx.send(f"Enqueued {result}.")
+            else: #TODO: yt/spotify album/playlist object with songs
+                if play_next:
+                    for song in result[::-1]: # Preserve order of playlist when adding to front of queue
+                        ctx.audio_player.song_queue.put_left_nowait(song)
+                else:
+                    for song in result:
+                        ctx.audio_player.song_queue.put_nowait(song)
+
+                playlist_str = "\n".join([f"`{i}.`  [**{song.title}**]({song.video_url})" for i, song in enumerate(result, start=1)])
+                embed_title = f"**Added {len(result)} track{'s' if len(result) > 1 else ''} to the queue**:"
+                embed = discord.Embed(
+                    title=embed_title,
+                    description=playlist_str,
+                    color=discord.Color.random()
+                )
+                await ctx.send(embed=embed)
                     
     @commands.command(name='play')
     async def play(self, ctx: commands.Context, *, args: str):

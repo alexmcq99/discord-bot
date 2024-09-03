@@ -11,7 +11,8 @@ from discord.ext.commands import Context
 from config import Config
 
 from .usage_tables import SongPlay, SongRequest
-from .ytdl_wrapper import YtdlSource
+from .utils import utc_to_pacific
+from .ytdl_source import YtdlSource
 
 
 class Song:
@@ -28,7 +29,7 @@ class Song:
         self.guild: discord.Guild = ctx.guild
         self.requester: discord.Member = ctx.author
         self.channel_where_requested: Messageable = ctx.channel
-        self.timestamp_requested: datetime = datetime.now()
+        self.timestamp_requested: datetime = utc_to_pacific(ctx.message.created_at)
         self.timestamp_last_played: datetime = None
         self.time_played: timedelta = timedelta()
 
@@ -100,9 +101,9 @@ class SongQueue(asyncio.Queue):
         start = (page - 1) * self.max_shown_songs
         end = start + self.max_shown_songs
 
-        queue_str = ""
-        for i, song in enumerate(self[start:end], start=start):
-            queue_str += f"`{i + 1}.`  [**{song.title}**]({song.video_url})\n"
+        queue_str = "\n".join([f"`{i}.`  [**{song.title}**]({song.video_url})" for i, song in enumerate(self[start:end], start=start + 1)])
+        # for i, song in enumerate(self[start:end], start=start + 1):
+        #     queue_str += f"`{i}.`  [**{song.title}**]({song.video_url})\n"
 
         embed_title = f"**Song queue has {len(self._queue)} track{'s' if len(self._queue) > 1 else ''}**:"
         embed = (discord.Embed(title=embed_title,

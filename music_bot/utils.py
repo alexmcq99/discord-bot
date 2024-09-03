@@ -2,6 +2,7 @@ import re
 
 from contextlib import suppress
 from datetime import datetime, timedelta
+from dateutil import tz
 from urllib.parse import parse_qs, urlparse
 
 # Time
@@ -33,6 +34,9 @@ def format_datetime(timestamp: datetime) -> str:
 
 def format_timedelta(delta: timedelta) -> int:
     return round(delta.total_seconds())
+
+def utc_to_pacific(timestamp: datetime) -> datetime:
+    return timestamp.astimezone(tz.gettz("US/Pacific"))
 
 # URL parsing
 
