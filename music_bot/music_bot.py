@@ -16,7 +16,7 @@ class MusicBot(commands.Bot):
         self.config: Config = config
 
     async def setup_hook(self) -> None:
-        await self.add_cog(MusicCog(self.config))
+        await self.add_cog(MusicCog(self.config, self))
 
     async def on_ready(self):
         print(f"Logged in as:\n{self.user.name}\n{self.user.id}")

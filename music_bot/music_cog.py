@@ -3,8 +3,10 @@
 import asyncio
 import re
 import traceback
+from concurrent.futures import ProcessPoolExecutor
 from typing import override
 
+import discord
 from asyncspotify import SpotifyException
 from discord.ext import commands
 from yt_dlp.utils import YoutubeDLError
@@ -31,6 +33,7 @@ class MusicCog(commands.Cog):
 
     Attributes:
         config: A Config object representing the configuration of the music bot.
+        bot: The commands.Bot object representing the music bot itself.
         ytdl_source_factory: YtdlSourceFactory object used to create and process YtdlSource objects
             with YouTube data retrieved from yt-dlp.
         usage_db: UsageDatabase object representing the database tracking usage data for the music bot.
@@ -43,10 +46,20 @@ class MusicCog(commands.Cog):
         reactions: A dictionary mapping command names to the reaction that the bot will use for that command.
     """
 
-    def __init__(self, config: Config):
+    def __init__(self, config: Config, bot: commands.Bot):
         self.config: Config = config
-        self.ytdl_source_factory: YtdlSourceFactory = YtdlSourceFactory(config)
-        self.usage_db: UsageDatabase = UsageDatabase(config)
+        self.bot: commands.Bot = bot
+
+        self.executor: ProcessPoolExecutor = (
+            ProcessPoolExecutor() if config.use_multiprocessing else None
+        )
+        self.usage_db: UsageDatabase = (
+            UsageDatabase(config) if config.record_stats else None
+        )
+
+        self.ytdl_source_factory: YtdlSourceFactory = YtdlSourceFactory(
+            config, self.executor
+        )
         self.song_factory: SongFactory = SongFactory(config, self.ytdl_source_factory)
         self.stats_factory: StatsFactory = StatsFactory(
             config, self.usage_db, self.ytdl_source_factory
@@ -77,6 +90,7 @@ class MusicCog(commands.Cog):
 
     @override
     async def cog_unload(self):
+        self.executor.shutdown(wait=False)
         tasks = [audio_player.leave() for audio_player in self.audio_players.values()]
         await asyncio.gather(*tasks)
 
@@ -99,11 +113,18 @@ class MusicCog(commands.Cog):
     async def cog_after_invoke(self, ctx):
         print("Stopping the cog")
         try:
-            print(
-                f"Exception in audio player: {ctx.audio_player.audio_player_task.exception()}"
-            )
-        except Exception as e:
-            print("Exception when printing exception: ", str(e))
+            if (
+                ctx.audio_player
+                and ctx.audio_player.audio_player_task
+                and ctx.audio_player.audio_player_task.done()
+            ):
+                print(
+                    f"Exception in audio player: {ctx.audio_player.audio_player_task.exception()}"
+                )
+        except asyncio.CancelledError as e:
+            print(type(e))
+            print("Task was cancelled: ", str(e))
+
         await ctx.message.add_reaction(
             self.reactions.get(ctx.command.name, self.default_reaction)
         )
@@ -167,8 +188,13 @@ class MusicCog(commands.Cog):
 
     @override
     @commands.Cog.listener()
-    async def on_voice_state_update(self, member, before, after):
-        if after.channel is None:
+    async def on_voice_state_update(
+        self,
+        member: discord.Member,
+        before: discord.VoiceChannel,
+        after: discord.VoiceChannel,
+    ):
+        if member.id != self.bot.user.id and after.channel is None:
             audio_player = self.get_audio_player(before.channel.guild.id)
             if (
                 audio_player.voice_client
@@ -184,13 +210,18 @@ class MusicCog(commands.Cog):
         Args:
             ctx: The discord command context in which a command is being invoked.
         """
-
         destination = ctx.author.voice.channel
         if ctx.audio_player.voice_client:
             await ctx.audio_player.voice_client.move_to(destination)
-            return
+        else:
+            ctx.audio_player.voice_client = await destination.connect()
 
-        ctx.audio_player.voice_client = await destination.connect()
+        if (
+            not ctx.audio_player.audio_player_task
+            or ctx.audio_player.audio_player_task.done()
+        ):
+            ctx.audio_player.start_audio_player()
+
         print(ctx.audio_player.voice_client)
 
     @commands.command(name="leave", aliases=["disconnect", "die"])
@@ -201,7 +232,7 @@ class MusicCog(commands.Cog):
             ctx: The discord command context in which a command is being invoked.
         """
 
-        if not ctx.audio_player.leave():
+        if not await ctx.audio_player.leave():
             await ctx.send("Not connected to any voice channel.")
         else:
             del self.audio_players[ctx.guild.id]
@@ -268,7 +299,7 @@ class MusicCog(commands.Cog):
             ctx: The discord command context in which a command is being invoked.
         """
 
-        if ctx.audio_player.is_looping:
+        if ctx.audio_player.is_queue_looping:
             await ctx.send("The queue is currently looping.")
         else:
             await ctx.send("The queue is not looping.")
@@ -365,7 +396,7 @@ class MusicCog(commands.Cog):
         await ctx.send(embed=stats.create_main_embed())
         if self.config.get_usage_graph_with_stats and stats.figure_filename:
             figure_file, embed = stats.create_figure_embed()
-            # await ctx.send(embed=embed, file=figure_file)
+            await ctx.send(embed=embed, file=figure_file)
             await ctx.send(file=figure_file)
 
     @commands.command(name="remove")
@@ -432,12 +463,6 @@ class MusicCog(commands.Cog):
             print("joining voice channel")
             await ctx.invoke(self.join)
         async with ctx.typing():
-            if (
-                not ctx.audio_player.audio_player_task
-                or ctx.audio_player.audio_player_task.done()
-            ):
-                ctx.audio_player.start_audio_player()
-
             # Set command context of song factory
             self.song_factory.ctx = ctx
 

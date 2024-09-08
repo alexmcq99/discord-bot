@@ -77,6 +77,7 @@ class AudioPlayer:
 
     def start_audio_player(self) -> None:
         """Starts the audio player task."""
+        print("Starting the audio player.")
         self.audio_player_task = self.event_loop.create_task(self.play_audio())
 
     async def play_audio(self) -> None:
@@ -90,12 +91,12 @@ class AudioPlayer:
                 self.play_next_song_event.clear()
 
                 try:
+                    print("About to wait for next song.")
                     await asyncio.wait_for(
                         self.poll_song_queue(), self.config.inactivity_timeout
                     )
                 except asyncio.TimeoutError:
-                    self.event_loop.create_task(self.stop())
-                    # await self.stop()
+                    await self.leave()
                     return
 
                 print(f"about to play song: {self.current_song}")
@@ -156,6 +157,15 @@ class AudioPlayer:
     def play_next_song(self, play_audio_error: Exception = None):
         """Gets the audio player ready to play the next song.
 
+        This function is used as the "after" callback for self.voice_client.play() in play_audio(),
+        meaning that the same thread responsible for playing audio to discord will also call this function.
+        Note that the "after" callback for discord's VoiceClient.play() function can only have one argument:
+        the exception raised by the voice client when playing audio.
+
+        Because this function is executed in a different thread, it needs special wrapper logic
+        (such as asyncio.run_coroutine_threadsafe() with the music bot's event loop) to make sure that asynchronous
+        tasks are still executed in the music bot's event loop.
+
         Args:
             play_audio_error: The exception raised by the discord VoiceClient while playing the previous song.
                 None if there was no exception.
@@ -165,6 +175,8 @@ class AudioPlayer:
             raise AudioError(str(play_audio_error))
 
         print("Song is done, preparing to play next song.")
+
+        # Record song play to usage database
         asyncio.run_coroutine_threadsafe(
             self.record_song_play_to_db(), loop=self.event_loop
         )

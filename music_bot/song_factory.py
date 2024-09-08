@@ -24,20 +24,15 @@ class SongFactory:
 
     async def process_playlist(self, playlist: Playlist) -> None:
         start = time.time()
-        if isinstance(playlist, YoutubePlaylist):
-            await self.process_yt_playlist(playlist)
-        else:
-            await self.process_spotify_playlist(playlist)
+        process_song_task = (
+            self.process_song_from_spotify
+            if isinstance(playlist, SpotifyPlaylist)
+            else self.process_song_from_yt_playlist
+        )
+        process_song_tasks = [process_song_task(song) for song in playlist]
+        await asyncio.gather(*process_song_tasks)
         end = time.time()
         print(f"Processing the spotify playlist took {end - start} seconds.")
-
-    async def process_spotify_playlist(self, yt_playlist: YoutubePlaylist) -> None:
-        for i, song_batch in enumerate(yt_playlist.batched_songs):
-            process_song_tasks = [
-                self.process_song_from_spotify(song) for song in song_batch
-            ]
-            await asyncio.gather(*process_song_tasks)
-            print(f"Finished batch {i}")
 
     async def create_song_from_spotify_track(self, spotify_track_url: str) -> Song:
         spotify_track = await self.spotify_client_wrapper.get_spotify_data_with_retry(
@@ -53,18 +48,6 @@ class SongFactory:
         )
         song.add_ytdl_video_source(ytdl_video_source)
         print(f"Finished processing song: {song.id}, {song.title}")
-
-    async def process_yt_playlist(self, yt_playlist: YoutubePlaylist) -> None:
-        if yt_playlist.ytdl_playlist_source.are_videos_processed:
-            print("YouTube playlist is already processed.")
-            return
-
-        for i, song_batch in enumerate(yt_playlist.batched_songs):
-            process_song_tasks = [
-                self.process_song_from_yt_playlist(song) for song in song_batch
-            ]
-            await asyncio.gather(*process_song_tasks)
-            print(f"Finished batch {i}")
 
     async def process_song_from_yt_playlist(self, song: Song) -> None:
         await self.ytdl_source_factory.process_ytdl_video_source(song.ytdl_video_source)

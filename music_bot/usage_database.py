@@ -16,12 +16,11 @@ from .usage_tables import Base, SongPlay, SongRequest
 class UsageDatabase:
     def __init__(self, config: Config):
         self.config: Config = config
-        if config.record_stats:
-            connection_string = f"sqlite+aiosqlite:///{config.database_file_path}"
-            self.engine = create_async_engine(connection_string)
-            self.async_session: sessionmaker = sessionmaker(
-                self.engine, expire_on_commit=False, class_=AsyncSession
-            )
+        connection_string = f"sqlite+aiosqlite:///{config.database_file_path}"
+        self.engine = create_async_engine(connection_string)
+        self.async_session: sessionmaker = sessionmaker(
+            self.engine, expire_on_commit=False, class_=AsyncSession
+        )
 
     async def initialize(self) -> None:
         if not os.path.exists(self.config.data_dir):

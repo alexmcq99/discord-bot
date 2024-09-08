@@ -12,6 +12,9 @@ def main():
     # Load config
     config_path = os.path.join("config", "config.yaml")
     config = Config(config_path)
+    print(f"Config: {config!r}")
+
+    print(f"Starting process id: {os.getpid()}")
 
     # Make bot
     music_bot = MusicBot(config)

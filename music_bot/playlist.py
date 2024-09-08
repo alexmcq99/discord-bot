@@ -49,10 +49,13 @@ class Playlist:
             "Requested by": self.requester.mention,
         }
 
-    @property
-    def batched_songs(self) -> Generator[tuple[Song], None, None]:
-        yield (self.songs[0],)
-        yield from itertools.batched(self.songs[1:], self.config.batch_size)
+    # @property
+    # def batched_songs(self) -> Generator[tuple[Song], None, None]:
+    #     yield (self.songs[0],)
+    #     yield from itertools.batched(self.songs[1:], self.config.batch_size)
+
+    def __iter__(self):
+        return self.songs.__iter__()
 
     def create_embed(self) -> discord.Embed:
         embed = discord.Embed(
