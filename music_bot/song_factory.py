@@ -1,49 +1,103 @@
 import asyncio
+import time
 
-from collections.abc import Sequence
-from config import Config
 from discord.ext.commands import Context
-from typing import Any, AsyncIterator
 
+from config import Config
+
+from .playlist import Playlist, SpotifyPlaylist, YoutubePlaylist
 from .song import Song
-from .spotify_wrapper import SpotifyWrapper
-from .usage_database import UsageDatabase
-from .utils import is_spotify_url
-from .ytdl_source import YtdlSource, YtdlSourceFactory
+from .spotify_client_wrapper import SpotifyClientWrapper
+from .ytdl_source import YtdlSourceFactory
+
 
 class SongFactory:
-    def __init__(self, config: Config, usage_db: UsageDatabase, ytdl_source_factory: YtdlSourceFactory) -> None:
+    def __init__(
+        self,
+        config: Config,
+        ytdl_source_factory: YtdlSourceFactory,
+    ) -> None:
         self.config: Config = config
         self.ytdl_source_factory: YtdlSourceFactory = ytdl_source_factory
-        self.spotify_wrapper = SpotifyWrapper(config.spotipy_client_id, config.spotipy_client_secret)
-        self.usage_db: UsageDatabase = usage_db
+        self.spotify_client_wrapper: SpotifyClientWrapper = SpotifyClientWrapper(config)
         self.ctx: Context = None
-        
-    async def create_songs(self, ctx: Context, play_cmd_args: str) -> (Song | list[Song]):
-        self.ctx = ctx
-        if is_spotify_url(play_cmd_args):
-            yt_search_queries = await self.spotify_wrapper.get_search_queries(play_cmd_args)
-            if len(yt_search_queries) == 1:
-                songs = await self.create_songs_from_yt(yt_search_queries[0])
-            else:
-                create_songs_tasks = [self.create_songs_from_yt(yt_search_query) for yt_search_query in yt_search_queries]
-                songs = await asyncio.gather(*create_songs_tasks)
-        else:
-            songs = await self.create_songs_from_yt(play_cmd_args)
-        
-        return songs
 
-    async def create_songs_from_yt(self, yt_query: str) -> (Song | list[Song]):
-        ytdl_result = await self.ytdl_source_factory.create_ytdl_sources(yt_query)
-        if isinstance(ytdl_result, YtdlSource):
-            song = await self.create_song(ytdl_result)
-            return song
+    async def process_playlist(self, playlist: Playlist) -> None:
+        start = time.time()
+        if isinstance(playlist, YoutubePlaylist):
+            await self.process_yt_playlist(playlist)
         else:
-            create_song_tasks = [self.create_song(ytdl_source) for ytdl_source in ytdl_result]
-            songs = await asyncio.gather(*create_song_tasks)
-            return songs
+            await self.process_spotify_playlist(playlist)
+        end = time.time()
+        print(f"Processing the spotify playlist took {end - start} seconds.")
 
-    async def create_song(self, ytdl_source: YtdlSource) -> Song:
-        song = Song(self.config, ytdl_source, self.ctx)
-        await self.usage_db.insert_data(song.create_song_request())
+    async def process_spotify_playlist(self, yt_playlist: YoutubePlaylist) -> None:
+        for i, song_batch in enumerate(yt_playlist.batched_songs):
+            process_song_tasks = [
+                self.process_song_from_spotify(song) for song in song_batch
+            ]
+            await asyncio.gather(*process_song_tasks)
+            print(f"Finished batch {i}")
+
+    async def create_song_from_spotify_track(self, spotify_track_url: str) -> Song:
+        spotify_track = await self.spotify_client_wrapper.get_spotify_data_with_retry(
+            spotify_track_url
+        )
+        song = Song(self.config, self.ctx, spotify_track=spotify_track)
+        await self.process_song_from_spotify(song)
+        return song
+
+    async def process_song_from_spotify(self, song: Song) -> None:
+        ytdl_video_source = await self.ytdl_source_factory.create_ytdl_video_source(
+            song.yt_search_query, is_yt_search=True
+        )
+        song.add_ytdl_video_source(ytdl_video_source)
+        print(f"Finished processing song: {song.id}, {song.title}")
+
+    async def process_yt_playlist(self, yt_playlist: YoutubePlaylist) -> None:
+        if yt_playlist.ytdl_playlist_source.are_videos_processed:
+            print("YouTube playlist is already processed.")
+            return
+
+        for i, song_batch in enumerate(yt_playlist.batched_songs):
+            process_song_tasks = [
+                self.process_song_from_yt_playlist(song) for song in song_batch
+            ]
+            await asyncio.gather(*process_song_tasks)
+            print(f"Finished batch {i}")
+
+    async def process_song_from_yt_playlist(self, song: Song) -> None:
+        await self.ytdl_source_factory.process_ytdl_video_source(song.ytdl_video_source)
+        song.is_processed_event.set()
+
+    async def create_spotify_playlist(self, spotify_url: str) -> SpotifyPlaylist:
+        spotify_object = await self.spotify_client_wrapper.get_spotify_data_with_retry(
+            spotify_url
+        )
+        songs = [
+            Song(self.config, self.ctx, spotify_track=spotify_track)
+            for spotify_track in spotify_object.tracks
+        ]
+        playlist = SpotifyPlaylist(self.config, self.ctx, spotify_object, songs)
+        print("Created spotify playlist")
+        return playlist
+
+    async def create_yt_playlist(self, yt_playlist_url: str) -> YoutubePlaylist:
+        ytdl_playlist_source = (
+            await self.ytdl_source_factory.create_ytdl_playlist_source(yt_playlist_url)
+        )
+        songs = [
+            Song(self.config, self.ctx, ytdl_video_source=ytdl_video_source)
+            for ytdl_video_source in ytdl_playlist_source.video_sources
+        ]
+        playlist = YoutubePlaylist(self.config, self.ctx, ytdl_playlist_source, songs)
+        return playlist
+
+    async def create_song_from_yt_video(
+        self, yt_video_args: str, is_yt_search: bool = False
+    ) -> Song:
+        ytdl_video_source = await self.ytdl_source_factory.create_ytdl_video_source(
+            yt_video_args, is_yt_search=is_yt_search
+        )
+        song = Song(self.config, self.ctx, ytdl_video_source=ytdl_video_source)
         return song

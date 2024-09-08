@@ -1,1 +1,1 @@
-from .music_cog import MusicCog
+from .music_bot import MusicBot

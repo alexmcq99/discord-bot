@@ -6,6 +6,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 class Base(DeclarativeBase):
     pass
 
+
 class SongRequest(Base):
     __tablename__ = "song_request"
 
@@ -17,6 +18,7 @@ class SongRequest(Base):
 
     def __repr__(self) -> str:
         return f"SongRequest(id={self.id!r}, timestamp={self.timestamp!r}, guild_id={self.guild_id!r}, requester_id={self.requester_id!r}, song_id={self.song_id!r})"
+
 
 class SongPlay(Base):
     __tablename__ = "song_play"

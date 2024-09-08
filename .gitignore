@@ -50,3 +50,4 @@ figures/
 
 # Test conda environments
 discord_bot_env_2.yml
+discord_bot_env_backup.yaml
