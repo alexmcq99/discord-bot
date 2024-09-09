@@ -128,8 +128,9 @@ def is_spotify_album_or_playlist(url: str) -> bool:
     Returns:
         True if the url links to a Spotify album or playlist, False otherwise.
     """
-    if match := regex_match_spotify_url(url):
-        music_type = match.group("music_type")
+    result = parse_spotify_url_or_uri(url)
+    if result:
+        music_type = result[0]
         return music_type == "album" or music_type == "playlist"
     return False
 
@@ -143,10 +144,35 @@ def is_spotify_track(url: str) -> bool:
     Returns:
         True if the url links to a Spotify track; otherwise, False.
     """
-    if match := regex_match_spotify_url(url):
-        music_type = match.group("music_type")
+    result = parse_spotify_url_or_uri(url)
+    if result:
+        music_type = result[0]
         return music_type == "track"
     return False
+
+
+def parse_spotify_url_or_uri(to_parse: str) -> tuple[str]:
+    if match := regex_match_spotify_url(to_parse):
+        return match.groups()
+    elif match := regex_match_spotify_uri(to_parse):
+        return match.groups()
+
+
+def regex_match_spotify_uri(uri: str) -> Match[str]:
+    """Attempts to regex match a uri to a pattern for Spotify urls.
+
+    Args:
+        uri: The uri to get a regex match from.
+
+    Returns:
+        The regex match if there is one; otherwise, None. If found, the regex match will have "music_type" and
+        "id" groups representing the music_type (track, album, or playlist) and the Spotify id, respectively.
+    """
+    # spotify:album:5yTx83u3qerZF7GRJu7eFk
+    pattern = re.compile(
+        r"^spotify:(?P<music_type>track|album|playlist):(?P<id>[a-zA-Z0-9]+)"
+    )
+    return pattern.match(uri)
 
 
 def regex_match_spotify_url(url: str) -> Match[str]:

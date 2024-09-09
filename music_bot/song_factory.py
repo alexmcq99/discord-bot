@@ -5,7 +5,13 @@ from discord.ext.commands import Context
 
 from config import Config
 
-from .playlist import Playlist, SpotifyPlaylist, YoutubePlaylist
+from .playlist import (
+    Playlist,
+    SpotifyAlbum,
+    SpotifyCollection,
+    SpotifyPlaylist,
+    YoutubePlaylist,
+)
 from .song import Song
 from .spotify_client_wrapper import SpotifyClientWrapper
 from .ytdl_source import YtdlSourceFactory
@@ -16,17 +22,18 @@ class SongFactory:
         self,
         config: Config,
         ytdl_source_factory: YtdlSourceFactory,
+        spotify_client_wrapper: SpotifyClientWrapper,
     ) -> None:
         self.config: Config = config
         self.ytdl_source_factory: YtdlSourceFactory = ytdl_source_factory
-        self.spotify_client_wrapper: SpotifyClientWrapper = SpotifyClientWrapper(config)
+        self.spotify_client_wrapper: SpotifyClientWrapper = spotify_client_wrapper
         self.ctx: Context = None
 
     async def process_playlist(self, playlist: Playlist) -> None:
         start = time.time()
         process_song_task = (
             self.process_song_from_spotify
-            if isinstance(playlist, SpotifyPlaylist)
+            if isinstance(playlist, SpotifyCollection)
             else self.process_song_from_yt_playlist
         )
         process_song_tasks = [process_song_task(song) for song in playlist]
@@ -35,10 +42,10 @@ class SongFactory:
         print(f"Processing the spotify playlist took {end - start} seconds.")
 
     async def create_song_from_spotify_track(self, spotify_track_url: str) -> Song:
-        spotify_track = await self.spotify_client_wrapper.get_spotify_data_with_retry(
+        spotify_track = await self.spotify_client_wrapper.get_spotify_data(
             spotify_track_url
         )
-        song = Song(self.config, self.ctx, spotify_track=spotify_track)
+        song = Song(self.config, self.ctx, spotify_track_data=spotify_track)
         await self.process_song_from_spotify(song)
         return song
 
@@ -53,17 +60,19 @@ class SongFactory:
         await self.ytdl_source_factory.process_ytdl_video_source(song.ytdl_video_source)
         song.is_processed_event.set()
 
-    async def create_spotify_playlist(self, spotify_url: str) -> SpotifyPlaylist:
-        spotify_object = await self.spotify_client_wrapper.get_spotify_data_with_retry(
-            spotify_url
-        )
+    async def create_spotify_collection(self, spotify_url: str) -> SpotifyCollection:
+        spotify_data = await self.spotify_client_wrapper.get_spotify_data(spotify_url)
         songs = [
-            Song(self.config, self.ctx, spotify_track=spotify_track)
-            for spotify_track in spotify_object.tracks
+            Song(self.config, self.ctx, spotify_track_data=spotify_track_data["track"])
+            for spotify_track_data in spotify_data["tracks"]["items"]
         ]
-        playlist = SpotifyPlaylist(self.config, self.ctx, spotify_object, songs)
-        print("Created spotify playlist")
-        return playlist
+
+        if spotify_data.get("type") == "album":
+            collection = SpotifyAlbum(self.config, self.ctx, spotify_data, songs)
+        else:
+            collection = SpotifyPlaylist(self.config, self.ctx, spotify_data, songs)
+        print("Created spotify collection")
+        return collection
 
     async def create_yt_playlist(self, yt_playlist_url: str) -> YoutubePlaylist:
         ytdl_playlist_source = (

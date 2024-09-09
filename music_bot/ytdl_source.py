@@ -143,64 +143,28 @@ class YtdlPlaylistSource(YtdlSource):
         )
 
 
-class AggregateYtdlError(Exception):
-    def __init__(
-        self,
-        msg: str,
-        ytdl_errors: list[YoutubeDLError],
-        *args: tuple,
-        **kwargs: dict[str, Any],
-    ) -> None:
-        super().__init__(msg, *args, **kwargs)
-        self.ytdl_errors: list[YoutubeDLError] = ytdl_errors
-
-
-def extract_ytdl_data_with_retry(
-    *args: tuple, max_tries=3, retry_interval_sec=5, **kwargs: dict[str, Any]
-) -> dict[str, Any]:
-    """Extracts YouTube data using yt-dlp extract_info() method, with retry logic.
+def get_ytdl_data(*args: tuple, **kwargs: dict[str, Any]) -> dict[str, Any]:
+    """Extracts YouTube data using yt-dlp extract_info() method.
 
     Args:
         *args: Tuple of arguments to pass to extract_info() method.
-        max_tries: Integer representing the how many times to try calling extract_info() before giving up.
-            Defaults to 3.
-        retry_interval_sec: Integer representing how long to wait between retries, in seconds. Defaults to 5.
         **kwargs: Dictionary of keyword arguments to pass to extract_info() method.
 
     Returns:
-        A dictionary of YouTube data retrieved from yt-dlp.
+        A dictionary of sanitized YouTube data retrieved from yt-dlp.
     """
     print(f"Should be in different process. Process id: {os.getpid()}")
     ytdl = YoutubeDL(YtdlSourceFactory.YTDL_OPTIONS)
 
-    tries, ytdl_data = 0, None
-    ytdl_errors = []
-    while not ytdl_data and tries < max_tries:
-        try:
-            print(f"Extracting info for try {tries + 1}")
-            start = time.time()
-            ytdl_data = ytdl.extract_info(*args, **kwargs)
-            end = time.time()
-            time_span = end - start
-            print(f"Are we blocking here in extract_info? It took {time_span} seconds.")
-        except YoutubeDLError as e:
-            print(f"Encountered YTDL error on try {tries + 1} of {max_tries}: {e}")
-            ytdl_errors.append(e)
-            time.sleep(retry_interval_sec)
-        # except Exception as e:
-        #     print(f"Encountered exception on try {tries + 1} of {max_tries}: {e}")
-        #     await asyncio.sleep(retry_interval_sec)
-
-        tries += 1
-
-    if not ytdl_data:
-        msg = (
-            f"Failed to get data from YTDL after {tries} tries for argument: {args[0]}."
-        )
-        print(msg)
-        raise AggregateYtdlError(msg, ytdl_errors)
-    else:
-        print(f"extracted info on try {tries}")
+    try:
+        print("Extracting info")
+        start = time.time()
+        ytdl_data = ytdl.extract_info(*args, **kwargs)
+        end = time.time()
+        time_span = end - start
+        print(f"Are we blocking here in extract_info? It took {time_span} seconds.")
+    except YoutubeDLError as e:
+        print(f"Encountered YTDL error: {e}")
 
     return ytdl.sanitize_info(ytdl_data)
 
@@ -305,7 +269,7 @@ class YtdlSourceFactory:
         Returns:
             A sanitized dictionary of YouTube data retrieved from yt-dlp.
         """
-        partial_func = functools.partial(extract_ytdl_data_with_retry, *args, **kwargs)
+        partial_func = functools.partial(get_ytdl_data, *args, **kwargs)
         ytdl_data = await asyncio.get_running_loop().run_in_executor(
             self.executor, partial_func
         )

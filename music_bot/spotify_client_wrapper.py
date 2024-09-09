@@ -3,19 +3,42 @@ Contains classes to retrieve Spotify data using asyncspotify.
 """
 
 import asyncio
+import functools
+import os
+from concurrent.futures import Executor
+from typing import Any
 
-from asyncspotify import (
-    Client,
-    ClientCredentialsFlow,
-    FullAlbum,
-    FullPlaylist,
-    FullTrack,
-)
-from asyncspotify.exceptions import SpotifyException
+import spotipy
+from spotipy.oauth2 import SpotifyClientCredentials
 
 from config import Config
 
-from .utils import regex_match_spotify_url
+from .utils import parse_spotify_url_or_uri
+
+
+def get_spotify_data(
+    spotify_client_id: str, spotify_client_secret: str, url: str
+) -> dict[str, Any]:
+    print(f"Should be in different process. Process id: {os.getpid()}")
+
+    creds_mgr = SpotifyClientCredentials(
+        client_id=spotify_client_id,
+        client_secret=spotify_client_secret,
+    )
+    sp_client = spotipy.Spotify(client_credentials_manager=creds_mgr)
+
+    music_type, spotify_id = parse_spotify_url_or_uri(url)
+    get_data = getattr(sp_client, music_type)
+    spotify_data = get_data(spotify_id)
+
+    if "tracks" in spotify_data:
+        curr_page = spotify_data["tracks"]
+        tracks = curr_page["items"]
+        while curr_page.get("next"):
+            curr_page = sp_client.next(curr_page)
+            tracks.extend(curr_page["items"])
+
+    return spotify_data
 
 
 class SpotifyClientWrapper:
@@ -29,22 +52,17 @@ class SpotifyClientWrapper:
         spotify_auth: A ClientCredentialsFlow object for asyncspotify that's used to create a Spotify client.
     """
 
-    def __init__(self, config: Config) -> None:
+    def __init__(self, config: Config, executor: Executor) -> None:
         """Initializes the spotify client wrapper based on the provided config.
 
         Args:
             config: A Config object representing the configuration of the music bot.
         """
         self.config: Config = config
-        self.spotify_auth: ClientCredentialsFlow = ClientCredentialsFlow(
-            client_id=config.spotipy_client_id,
-            client_secret=config.spotipy_client_secret,
-        )
+        self.executor: Executor = executor
 
-    async def get_spotify_data_with_retry(
-        self, url, max_tries=3, retry_interval_sec=5
-    ) -> FullTrack | FullAlbum | FullPlaylist:
-        """Retrieves Spotify data for a track, album, or playlist using asyncspotify, with retry logic.
+    async def get_spotify_data(self, url: str):
+        """Retrieves Spotify data for a track, album, or playlist using asyncspotify.
 
         Args:
             url: A string containing a Spotify url to a track, album, or playlist.
@@ -60,25 +78,15 @@ class SpotifyClientWrapper:
         Raises:
             SpotifyException: If the Spotify data cannot be retrieved after the maximum amount of tries.
         """
-        async with Client(self.spotify_auth) as spotify_client:
-            match = regex_match_spotify_url(url)
-            music_type, spotify_id = match.groups()
-            get_func = getattr(spotify_client, f"get_{music_type}")
+        print(f"Current process id: {os.getpid()}")
 
-            tries, result = 0, None
-            while not result and tries < max_tries:
-                try:
-                    result = await get_func(spotify_id)
-                except SpotifyException as e:
-                    print("Exception when getting data from Spotify: ", e)
-                    asyncio.sleep(retry_interval_sec)
-
-                tries += 1
-
-            if result:
-                print(f"Successfully got Spotify data after {tries} tries.")
-                return result
-            else:
-                raise SpotifyException(
-                    f"Failed to get data from Spotify after {tries} tries."
-                )
+        partial_func = functools.partial(
+            get_spotify_data,
+            self.config.spotipy_client_id,
+            self.config.spotipy_client_secret,
+            url,
+        )
+        spotify_data = await asyncio.get_running_loop().run_in_executor(
+            self.executor, partial_func
+        )
+        return spotify_data

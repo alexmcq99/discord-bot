@@ -7,7 +7,6 @@ from datetime import datetime, timedelta
 from typing import Any
 
 import discord
-from asyncspotify import SimpleTrack
 from discord.abc import Messageable
 from discord.ext.commands import Context
 
@@ -31,7 +30,7 @@ class Song:
         config: Config,
         ctx: Context,
         ytdl_video_source: YtdlVideoSource = None,
-        spotify_track: SimpleTrack = None,
+        spotify_track_data: dict[str, Any] = None,
     ) -> None:
         self.config: Config = config
         self.ctx: Context = ctx
@@ -44,7 +43,7 @@ class Song:
         if ytdl_video_source:
             self.add_ytdl_video_source(ytdl_video_source)
         else:
-            self.add_spotify_track(spotify_track)
+            self.add_spotify_track(spotify_track_data)
 
         self.guild: discord.Guild = ctx.guild
         self.requester: discord.Member = ctx.author
@@ -69,20 +68,22 @@ class Song:
         if ytdl_video_source.is_processed:
             self.is_processed_event.set()
 
-    def add_spotify_track(self, spotify_track: SimpleTrack) -> None:
+    def add_spotify_track(self, spotify_track_data: dict[str, Any]) -> None:
         self.ytdl_video_source: YtdlVideoSource = None
-        self.spotify_track: SimpleTrack = spotify_track
+        self.spotify_track_data = spotify_track_data
 
-        self.title: str = spotify_track.name
-        self.url: str = spotify_track.link
+        self.title: str = spotify_track_data.get("name")
+        self.url: str = spotify_track_data["external_urls"]["spotify"]
         self.link_markdown: str = get_link_markdown(self.title, self.url)
 
-        artist = spotify_track.artists[0]
-        self.uploader_name: str = artist.name
-        self.uploader_url: str = artist.link
-        self.uploader_link_markdown: str = get_link_markdown(artist.name, artist.link)
+        artist = spotify_track_data["artists"][0]
+        self.uploader_name: str = artist.get("name")
+        self.uploader_url: str = artist["external_urls"]["spotify"]
+        self.uploader_link_markdown: str = get_link_markdown(
+            self.uploader_name, self.uploader_url
+        )
 
-        self.yt_search_query: str = f"{artist.name} - {spotify_track.name}"
+        self.yt_search_query: str = f"{self.title} - {self.url}"
 
     @property
     def audio_source(self) -> discord.FFmpegOpusAudio:

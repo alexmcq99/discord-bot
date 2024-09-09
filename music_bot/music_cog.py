@@ -7,7 +7,6 @@ from concurrent.futures import ProcessPoolExecutor
 from typing import override
 
 import discord
-from asyncspotify import SpotifyException
 from discord.ext import commands
 from yt_dlp.utils import YoutubeDLError
 
@@ -15,6 +14,7 @@ from config import Config
 
 from .audio_player import AudioPlayer
 from .song_factory import SongFactory
+from .spotify_client_wrapper import SpotifyClientWrapper
 from .stats import StatsFactory
 from .usage_database import UsageDatabase
 from .utils import (
@@ -60,7 +60,12 @@ class MusicCog(commands.Cog):
         self.ytdl_source_factory: YtdlSourceFactory = YtdlSourceFactory(
             config, self.executor
         )
-        self.song_factory: SongFactory = SongFactory(config, self.ytdl_source_factory)
+        self.spotify_client_wrapper: SpotifyClientWrapper = SpotifyClientWrapper(
+            config, self.executor
+        )
+        self.song_factory: SongFactory = SongFactory(
+            config, self.ytdl_source_factory, self.spotify_client_wrapper
+        )
         self.stats_factory: StatsFactory = StatsFactory(
             config, self.usage_db, self.ytdl_source_factory
         )
@@ -161,7 +166,7 @@ class MusicCog(commands.Cog):
             await ctx.send(
                 f"YoutubeDL threw an error with the following message: {str(error)}"
             )
-        elif isinstance(error, SpotifyException):
+        elif isinstance(error, Exception):
             await ctx.send(
                 "Encountered an error when getting Spotify data. Please check if the given Spotify url is valid."
             )
@@ -470,7 +475,7 @@ class MusicCog(commands.Cog):
             if is_yt_playlist(args):
                 playlist = await self.song_factory.create_yt_playlist(args)
             elif is_spotify_album_or_playlist(args):
-                playlist = await self.song_factory.create_spotify_playlist(args)
+                playlist = await self.song_factory.create_spotify_collection(args)
             elif is_spotify_track(args):
                 song = await self.song_factory.create_song_from_spotify_track(args)
             else:  # Must be youtube video url or search query

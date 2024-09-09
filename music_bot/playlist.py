@@ -1,8 +1,6 @@
-import itertools
-from typing import Generator
+from typing import Any
 
 import discord
-from asyncspotify import FullAlbum, FullPlaylist
 from discord.ext import commands
 
 from config import Config
@@ -49,11 +47,6 @@ class Playlist:
             "Requested by": self.requester.mention,
         }
 
-    # @property
-    # def batched_songs(self) -> Generator[tuple[Song], None, None]:
-    #     yield (self.songs[0],)
-    #     yield from itertools.batched(self.songs[1:], self.config.batch_size)
-
     def __iter__(self):
         return self.songs.__iter__()
 
@@ -74,37 +67,77 @@ class Playlist:
         return embed
 
 
-class SpotifyPlaylist(Playlist):
+class SpotifyCollection(Playlist):
     SPOTIFY_GREEN_RGB = (29, 185, 84)
 
     def __init__(
         self,
         config: Config,
         ctx: commands.Context,
-        spotify_object: FullAlbum | FullPlaylist,
+        spotify_data: dict[str, Any],
         songs: list[Song],
     ):
-        super().__init__(config, ctx, spotify_object.name, spotify_object.link, songs)
-        self.spotify_object: FullAlbum | FullPlaylist = spotify_object
+        super().__init__(
+            config,
+            ctx,
+            spotify_data.get("name"),
+            spotify_data["external_urls"]["spotify"],
+            songs,
+        )
+        self.spotify_data = spotify_data
+        self.thumbnail_url: str = spotify_data["images"][0]["url"]
 
-        self.embed_title: str = f"Processing Spotify playlist:"
 
-        self.thumbnail_url: str = spotify_object.images[0].url
+class SpotifyPlaylist(SpotifyCollection):
+    def __init__(
+        self,
+        config: Config,
+        ctx: commands.Context,
+        spotify_data: dict[str, Any],
+        songs: list[Song],
+    ):
+        super().__init__(
+            config,
+            ctx,
+            spotify_data,
+            songs,
+        )
+        self.embed_title: str = "Processing Spotify playlist:"
 
-        if isinstance(spotify_object, FullAlbum):  # Album
-            artist = spotify_object.artists[0]
-            self.embed_fields["Artist"] = get_link_markdown(artist.name, artist.link)
-            self.embed_color: discord.Color = discord.Color.from_rgb(
-                *self.SPOTIFY_GREEN_RGB
-            )
-        else:  # Playlist
-            user = spotify_object.owner
-            self.embed_fields["User"] = get_link_markdown(user.name, user.link)
-            self.embed_color: discord.Color = (
-                discord.Color.from_str(spotify_object.primary_color)
-                if spotify_object.primary_color
-                else discord.Color.from_rgb(*self.SPOTIFY_GREEN_RGB)
-            )
+        user = spotify_data["owner"]
+        self.embed_fields["User"] = get_link_markdown(
+            user["display_name"], user["external_urls"]["spotify"]
+        )
+        self.embed_color: discord.Color = (
+            discord.Color.from_str(spotify_data["primary_color"])
+            if spotify_data.get("primary_color")
+            else discord.Color.from_rgb(*self.SPOTIFY_GREEN_RGB)
+        )
+
+
+class SpotifyAlbum(SpotifyCollection):
+    def __init__(
+        self,
+        config: Config,
+        ctx: commands.Context,
+        spotify_data: dict[str, Any],
+        songs: list[Song],
+    ):
+        super().__init__(
+            config,
+            ctx,
+            spotify_data,
+            songs,
+        )
+        self.embed_title: str = "Processing Spotify album:"
+
+        artist = spotify_data["artists"][0]
+        self.embed_fields["Artist"] = get_link_markdown(
+            artist["name"], artist["external_urls"]["spotify"]
+        )
+        self.embed_color: discord.Color = discord.Color.from_rgb(
+            *self.SPOTIFY_GREEN_RGB
+        )
 
 
 class YoutubePlaylist(Playlist):
@@ -124,7 +157,7 @@ class YoutubePlaylist(Playlist):
 
         self.thumbnail_url: str = ytdl_playlist_source.thumbnail_url
 
-        self.embed_title: str = f"Processing YouTube playlist:"
+        self.embed_title: str = "Processing YouTube playlist:"
         self.embed_color: discord.Color = discord.Color.from_rgb(*self.YOUTUBE_RED_RGB)
 
         self.embed_fields["Channel"] = ytdl_playlist_source.uploader_link_markdown
