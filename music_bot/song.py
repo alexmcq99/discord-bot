@@ -1,10 +1,12 @@
+"""Contains classes Song and SongQueue, which contain logic related to the songs played by the music bot."""
+
 import asyncio
 import itertools
 import math
 import random
 from collections.abc import Sequence
 from datetime import datetime, timedelta
-from typing import Any
+from typing import Any, Iterator, override
 
 import discord
 from discord.abc import Messageable
@@ -18,6 +20,27 @@ from .ytdl_source import YtdlVideoSource
 
 
 class Song:
+    """Represents a song to be played by the music bot.
+
+    Attributes:
+        config: A Config object representing the configuration of the music bot.
+        ctx: The discord command context in which a command is being invoked.
+        ytdl_video_source: The YtdlVideoSource object for the song. This must be created and processed by yt-dlp
+            for the song to be a valid audio source, since audio is streamed from YouTube.
+        spotify_track_data: A dictionary containing spotify track data for the song. If songs are created from
+            spotify tracks, they eventually have to populate and process ytdl_video_source to be streamed.
+        is_processed_event: An asyncio.Event representing if the song (really, ytdl_video_source) has been processed or not.
+            This must be set for the song to be streamed in discord.
+        guild: The discord guild where the song was requested.
+        requester: The discord member who requested the song.
+        channel_where_requested: The discord channel where the song was requested.
+        timestamp_requested: Datetime when the song was requested, which is
+            when the command to request the song was sent.
+        timestamp_played: Datetime when the song was played for the first time.
+        timestamps_started: List of datetime objects when the song was started or unpaused.
+        timestamps_stopped: List of datetime objects when the song was stopped or paused.
+    """
+
     FFMPEG_OPTIONS = {
         "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
         "options": "-vn",
@@ -32,6 +55,18 @@ class Song:
         ytdl_video_source: YtdlVideoSource = None,
         spotify_track_data: dict[str, Any] = None,
     ) -> None:
+        """Initializes a Song instance.
+
+        This constructor will be called with one of arguments spotify_track_data or ytdl_video_source populated.
+
+        Args:
+            config: A Config object representing the configuration of the music bot.
+            ctx: The discord command context in which a command is being invoked.
+            ytdl_video_source: The YtdlVideoSource object for the song. This must be created and processed by yt-dlp
+                for the song to be a valid audio source, since audio is streamed from YouTube.
+            spotify_track_data: A dictionary containing spotify track data for the song. If songs are created from
+                spotify tracks, they eventually have to populate and process ytdl_video_source to be streamed.
+        """
         self.config: Config = config
         self.ctx: Context = ctx
 
@@ -54,6 +89,15 @@ class Song:
         self.timestamps_stopped: list[datetime] = []
 
     def add_ytdl_video_source(self, ytdl_video_source: YtdlVideoSource) -> None:
+        """Adds YtdlVideoSource to the song.
+
+        This instance method must be called for the song to be a valid audio source,
+        since audio is streamed from YouTube (through ytdl_video_source). Once this method
+        is called, is_processed_event is set, meaning the song can now be played by the music bot.
+
+        Args:
+            ytdl_video_source: The YtdlVideoSource object to add to the song.
+        """
         self.ytdl_video_source: YtdlVideoSource = ytdl_video_source
 
         self.title: str = ytdl_video_source.title
@@ -69,6 +113,15 @@ class Song:
             self.is_processed_event.set()
 
     def add_spotify_track(self, spotify_track_data: dict[str, Any]) -> None:
+        """Adds Spotify track data to the song.
+
+        This instance method is called if the song is created using data from a Spotify track.
+        Eventually, add_ytdl_video_source() must be called for the song to be valid audio source,
+        but before then, the song object just acts as a useful way to store and display information.
+
+        Args:
+            spotify_track_data: A dictionary containing data on the Spotify track obtained using spotipy.
+        """
         self.ytdl_video_source: YtdlVideoSource = None
         self.spotify_track_data = spotify_track_data
 
@@ -83,16 +136,19 @@ class Song:
             self.uploader_name, self.uploader_url
         )
 
-        self.yt_search_query: str = f"{self.title} - {self.url}"
+        self.yt_search_query: str = f"{self.uploader_name} - {self.title}"
 
     @property
     def audio_source(self) -> discord.FFmpegOpusAudio:
+        """Returns a discord.FFmpegOpusAudio object created from the stream url of ytdl_video_source.
+        Used to stream the song's audio to discord."""
         return discord.FFmpegOpusAudio(
             source=self.ytdl_video_source.stream_url, **self.FFMPEG_OPTIONS
         )
 
     @property
     def total_time_played(self) -> timedelta:
+        """Returns a timedelta object representing the total time the song has been played."""
         return sum(
             [
                 stop or datetime.now() - start
@@ -103,6 +159,7 @@ class Song:
         )
 
     def create_song_request(self) -> SongRequest:
+        """Creates and returns SongRequest object which is inserted into the request table of the usage database."""
         song_request = SongRequest(
             id=self.request_id_counter,
             timestamp=self.timestamp_requested,
@@ -114,6 +171,7 @@ class Song:
         return song_request
 
     def create_song_play(self) -> SongPlay:
+        """Creates and returns SongPlay object which is inserted into the play table of the usage database."""
         song_play = SongPlay(
             id=self.play_id_counter,
             timestamp=self.timestamp_played,
@@ -126,6 +184,7 @@ class Song:
         return song_play
 
     def create_embed(self) -> discord.Embed:
+        """Creates a discord.Embed object that will be displayed in a discord channel when the song is played."""
         return (
             discord.Embed(
                 title="Now playing:",
@@ -139,30 +198,50 @@ class Song:
             .set_thumbnail(url=self.ytdl_video_source.thumbnail_url)
         )
 
-    def record_start(self):
+    def record_start(self) -> None:
+        """Records the song being started or unpaused."""
         timestamp_last_started = datetime.now()
         if not self.timestamp_played:
             self.timestamp_played = timestamp_last_started
         self.timestamps_started.append(timestamp_last_started)
 
-    def record_stop(self):
+    def record_stop(self) -> None:
+        """Records the song being stopped or paused."""
         timestamp_last_stopped = datetime.now()
         self.timestamps_stopped.append(timestamp_last_stopped)
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f":notes: {self.title} :notes: by {self.uploader_name}"
 
 
 class SongQueue(asyncio.Queue):
+    """Represents a queue of songs for the music bot to play.
+
+    Attributes:
+        config: A Config object representing the configuration of the music bot.
+        is_looping: A boolean indicating if the song queue is looping or not.
+    """
+
     def __init__(self, config: Config) -> None:
         super().__init__()
         self.config: Config = config
         self.is_looping: bool = False
 
     def flip_is_looping(self) -> None:
+        """Flips if the song queue is looping or not."""
         self.is_looping = not self.is_looping
 
     def create_embed(self, page: int) -> discord.Embed:
+        """Creates and returns the discord embed displaying the state of the song queue.
+
+        Args:
+            page: The page of the song queue to return. The embed can only display a certain amount
+                of songs at once (defined in config), the page determines which set of songs to display
+                on the embed.
+
+        Returns:
+            A discord.Embed object to be displayed in a discord channel.
+        """
         pages = math.ceil(self.qsize() / self.config.max_shown_songs)
 
         start = (page - 1) * self.config.max_shown_songs
@@ -182,6 +261,7 @@ class SongQueue(asyncio.Queue):
         ).set_footer(text=f"Viewing page {page}/{pages}")
         return embed
 
+    @override
     async def get(self) -> Song:
         song = await super().get()
         if self.is_looping:
@@ -189,6 +269,15 @@ class SongQueue(asyncio.Queue):
         return song
 
     def extend_nowait(self, songs: Sequence[Song], play_next: bool = False) -> None:
+        """Extends the song queue by a sequence of songs.
+
+        Args:
+            songs: The sequence of songs to add to the queue.
+            play_next: Whether to play the songs next or after or all the other songs in the queue.
+
+        Raises:
+            asyncio.QueueFull: If the queue is too full to fit the entire sequence of songs.
+        """
         if len(songs) > self._maxsize - self.qsize():
             raise asyncio.QueueFull
         self._extend(songs, play_next=play_next)
@@ -203,6 +292,15 @@ class SongQueue(asyncio.Queue):
             self._queue.extend(songs)
 
     def put_nowait(self, item: Song, play_next: bool = False) -> None:
+        """Adds a song to the queue.
+
+        Args:
+            songs: The song to add to the queue.
+            play_next: Whether to play the song next or after or all the other songs in the queue.
+
+        Raises:
+            asyncio.QueueFull: If the queue is full.
+        """
         if self.full():
             raise asyncio.QueueFull
         self._put(item, play_next=play_next)
@@ -210,34 +308,45 @@ class SongQueue(asyncio.Queue):
         self._finished.clear()
         self._wakeup_next(self._getters)
 
-    def _put(self, item: Song, play_next: bool = False):
+    @override
+    def _put(self, item: Song, play_next: bool = False) -> None:
         if play_next:
             self._queue.appendleft(item)
         else:
             self._queue.append(item)
 
-    def __getitem__(self, item: Any):
+    def __getitem__(self, item: Song) -> Song:
         if isinstance(item, slice):
             return list(itertools.islice(self._queue, item.start, item.stop, item.step))
         else:
             return self._queue[item]
 
-    def __bool__(self):
+    def __bool__(self) -> bool:
         return self.qsize() > 0
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator:
         return self._queue.__iter__()
 
-    def __len__(self):
+    def __len__(self) -> int:
         return self.qsize()
 
-    def clear(self):
+    def clear(self) -> None:
+        """Clears the queue of all songs."""
         self._queue.clear()
 
-    def shuffle(self):
+    def shuffle(self) -> None:
+        """Randomly shuffles the song queue."""
         random.shuffle(self._queue)
 
     def remove(self, index: int) -> Song:
+        """Removes a song from the queue and returns it.
+
+        Args:
+            index: The index of the song to remove.
+
+        Returns:
+            The song object that was removed.
+        """
         song = self._queue[index]
         if index < self.qsize():
             del self._queue[index]

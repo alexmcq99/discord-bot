@@ -38,7 +38,9 @@ class Config:
 
         self.batch_size: int = config_data.get("batch_size", 8)
 
-        self.use_multiprocessing: bool = config_data.get("use_multiprocessing", False)
+        self.enable_multiprocessing: bool = config_data.get(
+            "enable_multiprocessing", False
+        )
 
         print(f"batch size: {self.batch_size}")
         print(f"spotify song limit: {self.spotify_song_limit}")

@@ -1,9 +1,10 @@
-"""Contains the discord commands cog for the music bot, which contains the main logic for the music bot's behavior."""
+"""Contains the discord commands cog for the music bot, MusicCog,
+which contains the main logic for the music bot's behavior."""
 
 import asyncio
 import re
 import traceback
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import Executor, ProcessPoolExecutor
 from typing import override
 
 import discord
@@ -14,7 +15,7 @@ from config import Config
 
 from .audio_player import AudioPlayer
 from .song_factory import SongFactory
-from .spotify_client_wrapper import SpotifyClientWrapper
+from .spotify import SpotifyClientWrapper
 from .stats import StatsFactory
 from .usage_database import UsageDatabase
 from .utils import (
@@ -34,8 +35,12 @@ class MusicCog(commands.Cog):
     Attributes:
         config: A Config object representing the configuration of the music bot.
         bot: The commands.Bot object representing the music bot itself.
+        executor: concurrent.futures.Executor object, used to execute yt-dlp and spotify calls that would otherwise
+            block the asyncio event loop. Will be a ProcessPoolExecutor object if config.enable_multiprocessing
+            is True, otherwise will be None (ensuring the default ThreadPoolExecutor is used).
         ytdl_source_factory: YtdlSourceFactory object used to create and process YtdlSource objects
             with YouTube data retrieved from yt-dlp.
+        spotify_client_wrapper: SpotifyClientWrapper object used to retrieve data from Spotify using spotipy.
         usage_db: UsageDatabase object representing the database tracking usage data for the music bot.
         song_factory: SongFactory object responsible for creating Song objects from YouTube and Spotify data.
         stats_factory: StatsFactory object responsibly for creating Stats objects, which are used
@@ -50,13 +55,12 @@ class MusicCog(commands.Cog):
         self.config: Config = config
         self.bot: commands.Bot = bot
 
-        self.executor: ProcessPoolExecutor = (
-            ProcessPoolExecutor() if config.use_multiprocessing else None
+        self.executor: Executor = (
+            ProcessPoolExecutor() if config.enable_multiprocessing else None
         )
         self.usage_db: UsageDatabase = (
             UsageDatabase(config) if config.record_stats else None
         )
-
         self.ytdl_source_factory: YtdlSourceFactory = YtdlSourceFactory(
             config, self.executor
         )

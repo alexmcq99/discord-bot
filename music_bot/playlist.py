@@ -1,4 +1,6 @@
-from typing import Any
+"""Contains classes for playlists of songs from YouTube or Spotify."""
+
+from typing import Any, Iterator
 
 import discord
 from discord.ext import commands
@@ -11,6 +13,27 @@ from .ytdl_source import YtdlPlaylistSource
 
 
 class Playlist:
+    """Represents a playlist of songs from YouTube or Spotify.
+
+    Attributes:
+        config: A Config object representing the configuration of the music bot.
+        ctx: The discord command context in which a command is being invoked.
+        title: A string containing the title of the playlist.
+        url: A string containing the url of the playlist.
+        songs: The list of songs in the playlist.
+        requester: The discord member who requested the song.
+        playlist_link_markdown: A string containing a hyperlink to the playlist in markdown,
+            using the title and url.
+        embed_title: A string containing the title for the discord embed that will be displayed in discord.
+        embed_description: A string containing the description for the discord embed that will be displayed in discord.
+        embed_type: A string containing the type for the discord embed that will be displayed in discord.
+        embed_color: A discord.Color object for the color of the discord embed that will be displayed in discord.
+        embed_footer: A string containing the footer for the discord embed that will be displayed in discord.
+        embed_fields: A dictionary mapping field names to their values for the discord embed that will be displayed in discord.
+            Field names and values are both strings.
+        thumbnail_url: The url of the thumbnail for the playlist.
+    """
+
     def __init__(
         self,
         config: Config,
@@ -18,7 +41,7 @@ class Playlist:
         title: str,
         url: str,
         songs: list[Song],
-    ):
+    ) -> None:
         self.config: Config = config
         self.ctx: commands.Context = ctx
 
@@ -47,10 +70,18 @@ class Playlist:
             "Requested by": self.requester.mention,
         }
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator:
         return self.songs.__iter__()
 
     def create_embed(self) -> discord.Embed:
+        """Creates and returns the discord embed displaying information about the playlist.
+
+        Uses instance attributes such as embed_title, embed_type, etc., to create a discord embed.
+
+        Returns:
+            A discord.Embed object with information about the playlist that will be displayed
+            in the channel where the playlist was requested.
+        """
         embed = discord.Embed(
             title=self.embed_title,
             type=self.embed_type,
@@ -68,6 +99,14 @@ class Playlist:
 
 
 class SpotifyCollection(Playlist):
+    """Represents a collection of songs from Spotify, i.e., an album or playlist.
+
+    Attributes:
+        spotify_data: The dictionary of data for the Spotify album or playlist.
+        songs: The list of songs in the Spotify album or playlist.
+        thumbnail_url: The url of the thumbnail for the Spotify album or playlist.
+    """
+
     SPOTIFY_GREEN_RGB = (29, 185, 84)
 
     def __init__(
@@ -89,6 +128,15 @@ class SpotifyCollection(Playlist):
 
 
 class SpotifyPlaylist(SpotifyCollection):
+    """Represents a Spotify playlist.
+
+    Attributes:
+        embed_title: A string containing the title for the discord embed that will be displayed in discord.
+        embed_color: A discord.Color object for the color of the discord embed that will be displayed in discord.
+        embed_fields: A dictionary mapping field names to their values for the discord embed that will be displayed in discord.
+            Field names and values are both strings.
+    """
+
     def __init__(
         self,
         config: Config,
@@ -116,6 +164,15 @@ class SpotifyPlaylist(SpotifyCollection):
 
 
 class SpotifyAlbum(SpotifyCollection):
+    """Represents a Spotify album.
+
+    Attributes:
+        embed_title: A string containing the title for the discord embed that will be displayed in discord.
+        embed_color: A discord.Color object for the color of the discord embed that will be displayed in discord.
+        embed_fields: A dictionary mapping field names to their values for the discord embed that will be displayed in discord.
+            Field names and values are both strings.
+    """
+
     def __init__(
         self,
         config: Config,
@@ -141,6 +198,17 @@ class SpotifyAlbum(SpotifyCollection):
 
 
 class YoutubePlaylist(Playlist):
+    """Represents a YouTube playlist.
+
+    Attributes:
+        ytdl_playlist_source: The YtdlPlaylistSource object for the YouTube playlist.
+        thumbnail_url: The url of the thumbnail for the Spotify album or playlist.
+        embed_title: A string containing the title for the discord embed that will be displayed in discord.
+        embed_color: A discord.Color object for the color of the discord embed that will be displayed in discord.
+        embed_fields: A dictionary mapping field names to their values for the discord embed that will be displayed in discord.
+            Field names and values are both strings.
+    """
+
     YOUTUBE_RED_RGB = (255, 0, 0)
 
     def __init__(

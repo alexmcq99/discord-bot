@@ -235,8 +235,11 @@ class YtdlSourceFactory:
         """
         if is_yt_search:
             ytdl_args = "ytsearch:" + ytdl_args
+        print(f"Creating ytdl video source with ytdl_args: {ytdl_args}")
         ytdl_data = await self.get_ytdl_data(ytdl_args, download=False, process=True)
         if is_yt_search:
+            # if len(ytdl_data["entries"]) == 0:
+            #     print(ytdl_data)
             ytdl_data = ytdl_data["entries"][0]
         ytdl_video_source = YtdlVideoSource(ytdl_data)
         return ytdl_video_source

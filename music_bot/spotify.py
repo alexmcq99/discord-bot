@@ -1,9 +1,10 @@
 """
-Contains classes to retrieve Spotify data using asyncspotify.
+Contains class to retrieve Spotify data using spotipy.
 """
 
 import asyncio
 import functools
+import math
 import os
 from concurrent.futures import Executor
 from typing import Any
@@ -17,8 +18,25 @@ from .utils import parse_spotify_url_or_uri
 
 
 def get_spotify_data(
-    spotify_client_id: str, spotify_client_secret: str, url: str
+    spotify_client_id: str,
+    spotify_client_secret: str,
+    spotify_args: str,
+    track_limit: int = math.inf,
 ) -> dict[str, Any]:
+    """Retrieves Spotify data for a track, album, or playlist using spotipy.
+
+    Args:
+        spotify_client_id: A string containing a Spotify API client id.
+        spotify_client_secret: A string containing a Spotify API client secret.
+        spotify_args: A string containing a Spotify url or uri to a track, album, or playlist.
+        track_limit: The integer limit on the number of tracks returned for Spotify albums and playlists.
+
+    Returns:
+        A dictionary of data for the Spotify track, album, or playlist.
+
+    Raises:
+        SpotifyException: If the Spotify data cannot be retrieved after the maximum amount of tries.
+    """
     print(f"Should be in different process. Process id: {os.getpid()}")
 
     creds_mgr = SpotifyClientCredentials(
@@ -27,29 +45,32 @@ def get_spotify_data(
     )
     sp_client = spotipy.Spotify(client_credentials_manager=creds_mgr)
 
-    music_type, spotify_id = parse_spotify_url_or_uri(url)
+    music_type, spotify_id = parse_spotify_url_or_uri(spotify_args)
     get_data = getattr(sp_client, music_type)
     spotify_data = get_data(spotify_id)
 
     if "tracks" in spotify_data:
         curr_page = spotify_data["tracks"]
         tracks = curr_page["items"]
-        while curr_page.get("next"):
+        while curr_page.get("next") and len(tracks) < track_limit:
             curr_page = sp_client.next(curr_page)
-            tracks.extend(curr_page["items"])
+            tracks_to_add = curr_page["items"]
+            if len(tracks) + len(tracks_to_add) > track_limit:
+                end = track_limit - len(tracks)
+                tracks_to_add = tracks_to_add[:end]
+            tracks.extend(tracks_to_add)
 
     return spotify_data
 
 
 class SpotifyClientWrapper:
-    """Class that wraps usage of the client from asyncspotify to retrieve Spotify data.
+    """Class that wraps usage of the spotipy client to retrieve Spotify data.
 
-    Handles all interaction with the Spotify client from asyncspotify, wrapping calls with additional logic,
-    such as retries.
+    Handles all interaction with the Spotify client from spotipy.
 
     Attributes:
         config: A Config object representing the configuration of the music bot.
-        spotify_auth: A ClientCredentialsFlow object for asyncspotify that's used to create a Spotify client.
+        executor: An Executor object used to execute the spotify calls.
     """
 
     def __init__(self, config: Config, executor: Executor) -> None:
@@ -61,19 +82,14 @@ class SpotifyClientWrapper:
         self.config: Config = config
         self.executor: Executor = executor
 
-    async def get_spotify_data(self, url: str):
-        """Retrieves Spotify data for a track, album, or playlist using asyncspotify.
+    async def get_spotify_data(self, spotify_args: str):
+        """Retrieves Spotify data for a track, album, or playlist using spotipy.
 
         Args:
-            url: A string containing a Spotify url to a track, album, or playlist.
-            max_tries: Integer representing the how many times to try calling extract_info() before giving up.
-                Defaults to 3.
-            retry_interval_sec: Integer representing how long to wait between retries, in seconds. Defaults to 5.
+            spotify_args: A string containing a Spotify url or uri to a track, album, or playlist.
 
         Returns:
-            Either a FullTrack, FullAlbum, or FullPlaylist object representing
-            a Spotify track, album, or playlist, respectively.
-            This object can then be parsed for relevant information.
+            A dictionary of data for the Spotify track, album, or playlist.
 
         Raises:
             SpotifyException: If the Spotify data cannot be retrieved after the maximum amount of tries.
@@ -84,7 +100,8 @@ class SpotifyClientWrapper:
             get_spotify_data,
             self.config.spotipy_client_id,
             self.config.spotipy_client_secret,
-            url,
+            spotify_args,
+            self.config.spotify_song_limit,
         )
         spotify_data = await asyncio.get_running_loop().run_in_executor(
             self.executor, partial_func

@@ -1,3 +1,5 @@
+"""Contains classes to calculate usage statistics from the usage database and display them in discord."""
+
 import os
 from datetime import datetime, timedelta
 from typing import Any, Optional
@@ -18,6 +20,20 @@ from .ytdl_source import YtdlSourceFactory
 
 
 class Stats:
+    """Represents a statistical query.
+
+    Stores and displays statistics that were queried by a user.
+
+    Attributes:
+        embed_title: A string containing the title of the discord embed for the stats.
+        embed_description: A string containing the description of the discord embed for the stats.
+        thumbnail_url: A string containing the thumbnail url of the discord embed for the stats.
+        stats: A dictionary containing the actual statistics to be displayed in the discord embed.
+            The keys and values of the dictionary are the field names and values of the embed, respectively.
+        figure_filename: A string containing the filename for the figure (chart, graph, etc.)
+            that will be displayed in discord.
+    """
+
     def __init__(
         self,
         embed_title: str,
@@ -52,6 +68,16 @@ class Stats:
 
 
 class StatsFactory:
+    """Class responsible for creating Stats objects.
+
+    Attributes:
+        config: A Config object representing the configuration of the music bot.
+        ctx: The discord command context in which a command is being invoked.
+        usage_db: UsageDatabase object representing the database tracking usage data for the music bot.
+        ytdl_source_factory: YtdlSourceFactory object used to create and process YtdlSource objects
+            with YouTube data retrieved from yt-dlp.
+    """
+
     def __init__(
         self,
         config: Config,

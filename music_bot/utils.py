@@ -167,8 +167,10 @@ def regex_match_spotify_uri(uri: str) -> Match[str]:
     Returns:
         The regex match if there is one; otherwise, None. If found, the regex match will have "music_type" and
         "id" groups representing the music_type (track, album, or playlist) and the Spotify id, respectively.
+
+    Examples:
+    - spotify:album:5yTx83u3qerZF7GRJu7eFk
     """
-    # spotify:album:5yTx83u3qerZF7GRJu7eFk
     pattern = re.compile(
         r"^spotify:(?P<music_type>track|album|playlist):(?P<id>[a-zA-Z0-9]+)"
     )
@@ -184,10 +186,13 @@ def regex_match_spotify_url(url: str) -> Match[str]:
     Returns:
         The regex match if there is one; otherwise, None. If found, the regex match will have "music_type" and
         "id" groups representing the music_type (track, album, or playlist) and the Spotify id, respectively.
+
+    Examples:
+    - https://open.spotify.com/track/405HNEYKGDifuMcAZvqrqA?si=f38076221d0246b5
+    - https://open.spotify.com/album/643kxxjS5xPkzD4bR9vUn2?si=cuCeyEgYQm-pXKK7679ptQ
+    - https://open.spotify.com/playlist/6FkEOJ76LyyajBjOoGvGXT?si=6ba13d149a1b4d1c
     """
-    # https://open.spotify.com/track/405HNEYKGDifuMcAZvqrqA?si=f38076221d0246b5
-    # https://open.spotify.com/album/643kxxjS5xPkzD4bR9vUn2?si=cuCeyEgYQm-pXKK7679ptQ
-    # https://open.spotify.com/playlist/6FkEOJ76LyyajBjOoGvGXT?si=6ba13d149a1b4d1c
+
     pattern = re.compile(
         r"^https:\/\/open.spotify.com\/(?P<music_type>track|album|playlist)\/(?P<id>[a-zA-Z0-9]+)"
     )

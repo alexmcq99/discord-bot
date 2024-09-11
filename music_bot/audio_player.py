@@ -1,4 +1,4 @@
-"""Contains classes to poll the song queue and play audio in discord."""
+"""Contains class AudioPlayer to poll the song queue and play audio in discord."""
 
 import asyncio
 import traceback
@@ -28,7 +28,7 @@ class AudioPlayer:
         song_queue: The SongQueue object to poll songs from.
         event_loop: The asyncio event loop that the music bot runs in.
         play_next_song_event: An asyncio.Event object indicating if it's time to play the next song.
-        self.audio_player_task: An asyncio.Task that continuously polls the song queue
+        audio_player_task: An asyncio.Task that continuously polls the song queue
             and plays audio with the discord client.
     """
 
