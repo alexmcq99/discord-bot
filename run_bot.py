@@ -1,25 +1,25 @@
-import asyncio
+"""Runs the music bot."""
+
 import os
 
-import discord
-from discord.ext import commands
-
 from config import Config
-from music_bot import MusicCog
+from music_bot import MusicBot
 
-# Load config
-config_path = os.path.join("config", "config.yaml")
-config = Config(config_path)
 
-# Make bot
-intents = discord.Intents().all()
-client = discord.Client(intents=intents)
-bot = commands.Bot(command_prefix='-',intents=intents)
+def main():
+    """Loads the config and starts the music bot."""
 
-@bot.event
-async def on_ready():
-    print('Logged in as:\n{0.user.name}\n{0.user.id}'.format(bot))
+    # Load config
+    config_path = os.path.join("config", "config.yaml")
+    config = Config(config_path)
+    print(f"Config: {config!r}")
 
-# Run bot
-asyncio.run(bot.add_cog(MusicCog(bot, config)))
-bot.run(config.discord_token)
+    print(f"Starting process id: {os.getpid()}")
+
+    # Make bot
+    music_bot = MusicBot(config)
+    music_bot.run()
+
+
+if __name__ == "__main__":
+    main()
