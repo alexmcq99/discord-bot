@@ -57,13 +57,15 @@ class Playlist:
         self.embed_description: str = f"## {self.playlist_link_markdown}\n" + "\n".join(
             [
                 f"`{i}.`  **{song.link_markdown}**"
-                for i, song in enumerate(self.songs[: config.max_shown_songs], start=1)
+                for i, song in enumerate(
+                    self.songs[: config.max_displayed_songs], start=1
+                )
             ]
         )
         self.embed_type: str = "rich"
         self.embed_color: discord.Color = None
         self.embed_footer: str = (
-            f"Only showing the first {self.config.max_shown_songs} of {len(self.songs)} songs."
+            f"Only showing the first {self.config.max_displayed_songs} of {len(self.songs)} songs."
         )
 
         self.embed_fields: dict[str, str] = {
@@ -100,7 +102,7 @@ class Playlist:
         for field_name, field_value in self.embed_fields.items():
             embed = embed.add_field(name=field_name, value=field_value)
 
-        if len(self.songs) > self.config.max_shown_songs:
+        if len(self.songs) > self.config.max_displayed_songs:
             embed = embed.set_footer(text=self.embed_footer)
 
         return embed

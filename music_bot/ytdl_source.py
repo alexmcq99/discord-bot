@@ -264,7 +264,9 @@ class YtdlSourceFactory:
             The created YtdlPlaylistSource.
         """
         if is_yt_search:
-            ytdl_args = f"ytsearch{self.config.yt_search_song_limit}:" + ytdl_args
+            ytdl_args = (
+                f"ytsearch{self.config.yt_search_playlist_song_limit}:" + ytdl_args
+            )
         print(f"Args: {ytdl_args}")
         ytdl_data = await self.get_ytdl_data(ytdl_args, download=False, process=False)
         print("ytdl_data: ", ytdl_data)

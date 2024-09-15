@@ -1,3 +1,4 @@
+import math
 import os
 from typing import Any
 
@@ -18,28 +19,39 @@ class Config:
 
         self.command_prefix: str = config_data.get("command_prefix", "-")
 
-        self.reset_database: bool = config_data.get("reset_database", False)
-        self.record_stats: bool = config_data.get("record_stats", False)
-        self.get_usage_graph_with_stats: bool = config_data.get(
-            "get_usage_graph_with_stats", False
+        # Stats and Usage data
+        self.data_dir: str = config_data.get("data_dir", "data")
+        self.usage_database_filename: str = config_data.get(
+            "usage_database_filename", "usage.db"
+        )
+        self.usage_database_file_path: str = os.path.join(
+            self.data_dir, self.usage_database_filename
+        )
+        self.figure_dir: str = config_data.get("figure_dir", "figures")
+        self.enable_usage_database: bool = config_data.get(
+            "enable_usage_database", False
+        )
+        self.reset_usage_database: bool = config_data.get("reset_usage_database", False)
+        self.enable_stats_usage_graph: bool = config_data.get(
+            "enable_stats_usage_graph", False
         )
 
-        self.data_dir: str = config_data.get("data_dir", "data")
-        self.database_file_path: str = os.path.join(self.data_dir, "usage.db")
-        self.figure_dir: str = config_data.get("figure_dir", "figures")
-
-        self.max_shown_songs: int = config_data.get("max_shown_songs", 10)
-        self.yt_search_song_limit: int = config_data.get("yt_search_song_limit", 5)
-        self.spotify_song_limit: int = config_data.get("spotify_song_limit", 100)
+        # Music
+        self.max_displayed_songs: int = config_data.get("max_displayed_songs", 25)
+        self.playlist_song_limit: int = config_data.get("spotify_song_limit", math.inf)
+        self.yt_search_playlist_song_limit: int = config_data.get(
+            "yt_search_playlist_song_limit", 5
+        )
         self.inactivity_timeout: int = config_data.get("inactivity_timeout", 600)
 
+        # Concurrency
         self.enable_multiprocessing: bool = config_data.get(
             "enable_multiprocessing", True
         )
         self.process_pool_workers: int = config_data.get("process_pool_workers", None)
         self.thread_pool_workers: int = config_data.get("thread_pool_workers", 4)
 
-        print(f"spotify song limit: {self.spotify_song_limit}")
+        print(f"spotify song limit: {self.playlist_song_limit}")
 
     def load_config_file(self, filename: str) -> dict[str, Any]:
         try:

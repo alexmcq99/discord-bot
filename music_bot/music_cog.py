@@ -65,7 +65,7 @@ class MusicCog(commands.Cog):
         )
 
         self.usage_db: UsageDatabase = (
-            UsageDatabase(config) if config.record_stats else None
+            UsageDatabase(config) if config.enable_usage_database else None
         )
         self.ytdl_source_factory: YtdlSourceFactory = YtdlSourceFactory(
             config, self.executor
@@ -99,7 +99,7 @@ class MusicCog(commands.Cog):
 
     @override
     async def cog_load(self):
-        if self.config.record_stats:
+        if self.config.enable_usage_database:
             await self.usage_db.initialize()
         print("booting up")
 
@@ -298,7 +298,7 @@ class MusicCog(commands.Cog):
 
         await ctx.send(embed=ctx.audio_player.current_song.create_embed())
 
-    @commands.command(name="queue")
+    @commands.command(name="queue", aliases=["showqueue"])
     async def queue(self, ctx: commands.Context, *, page: int = 1):
         """Shows the songs in the queue.
         You can optionally specify the page to show. Each page contains
@@ -322,7 +322,7 @@ class MusicCog(commands.Cog):
     async def stats(self, ctx: commands.Context, *args):
         """Gets stats on a song, user, or guild."""
 
-        if not self.config.record_stats:
+        if not self.config.enable_usage_database:
             await ctx.send("Stats are not enabled.")
             return
 
@@ -358,7 +358,7 @@ class MusicCog(commands.Cog):
         async with ctx.typing():
             stats = await self.stats_factory.create_stats(ctx, **create_stats_kwargs)
             await ctx.send(embed=stats.create_main_embed())
-            if self.config.get_usage_graph_with_stats and stats.figure_filename:
+            if self.config.enable_stats_usage_graph and stats.figure_filename:
                 figure_file, embed = stats.create_figure_embed()
                 await ctx.send(embed=embed, file=figure_file)
                 await ctx.send(file=figure_file)
@@ -371,13 +371,13 @@ class MusicCog(commands.Cog):
             await ctx.send("Empty queue.")
             return
 
-        if is_int(args[0]):
+        if is_int(args[0]):  # Index
             index = int(args[0])
             removed_song = ctx.audio_player.remove_from_song_queue(index=index - 1)
             if not removed_song:
                 await ctx.send(f"{index} is not a valid index.")
                 return
-        else:
+        else:  # YouTube search query
             ytdl_args = " ".join(args)
             yt_playlist = await self.song_factory.create_yt_playlist(
                 ytdl_args, is_yt_search=True
@@ -450,7 +450,7 @@ class MusicCog(commands.Cog):
 
             # Single song
             if song:
-                if self.config.record_stats:
+                if self.config.enable_usage_database:
                     start = time.time()
                     await self.usage_db.insert_data(song.create_song_request())
                     end = time.time()
@@ -469,7 +469,7 @@ class MusicCog(commands.Cog):
                 )
                 for song in playlist:
                     await song.is_processed_event.wait()
-                    if self.config.record_stats:
+                    if self.config.enable_usage_database:
                         start = time.time()
                         await self.usage_db.insert_data(song.create_song_request())
                         end = time.time()

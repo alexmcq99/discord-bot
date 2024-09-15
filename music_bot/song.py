@@ -270,10 +270,10 @@ class SongQueue(asyncio.Queue):
         Returns:
             A discord.Embed object to be displayed in a discord channel.
         """
-        pages = math.ceil(self.qsize() / self.config.max_shown_songs)
+        pages = math.ceil(self.qsize() / self.config.max_displayed_songs)
 
-        start = (page - 1) * self.config.max_shown_songs
-        end = start + self.config.max_shown_songs
+        start = (page - 1) * self.config.max_displayed_songs
+        end = start + self.config.max_displayed_songs
 
         queue_str = "\n".join(
             [

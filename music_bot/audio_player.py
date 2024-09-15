@@ -257,7 +257,7 @@ class AudioPlayer:
     async def record_song_play_to_db(self, song: Song) -> None:
         """Records a song play in the usage database."""
         print("Entered record_song_play_to_db().")
-        if self.config.record_stats:
+        if self.config.enable_usage_database:
             print("Recording stats, so we can record this song play.")
             song.record_stop()
             print("Finished recording song stop.")

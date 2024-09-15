@@ -103,7 +103,7 @@ class SpotifyClientWrapper:
             self.config.spotipy_client_id,
             self.config.spotipy_client_secret,
             spotify_args,
-            self.config.spotify_song_limit,
+            self.config.playlist_song_limit,
         )
         spotify_data = await asyncio.get_running_loop().run_in_executor(
             self.executor, partial_func

@@ -163,7 +163,7 @@ class StatsFactory:
             thumbnail_url = ctx.guild.icon.url
 
         figure_filename = None
-        if self.config.get_usage_graph_with_stats:
+        if self.config.enable_stats_usage_graph:
             figure_filename = await self.create_figure()
 
         stats = Stats(
@@ -244,7 +244,7 @@ class StatsFactory:
         return formatted
 
     async def create_figure(self) -> str:
-        if not self.config.get_usage_graph_with_stats:
+        if not self.config.enable_stats_usage_graph:
             return None
 
         request_counts_raw = await self.usage_db.get_song_request_counts_by_date(
