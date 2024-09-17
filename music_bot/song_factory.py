@@ -119,7 +119,15 @@ class SongFactory:
         start = time.time()
         spotify_data = await self.spotify_client_wrapper.get_spotify_data(spotify_args)
         songs = [
-            Song(self.config, self.ctx, spotify_track_data=spotify_track_data["track"])
+            Song(
+                self.config,
+                self.ctx,
+                spotify_track_data=(
+                    spotify_track_data["track"]
+                    if "track" in spotify_track_data
+                    else spotify_track_data
+                ),
+            )
             for spotify_track_data in spotify_data["tracks"]["items"]
         ]
 

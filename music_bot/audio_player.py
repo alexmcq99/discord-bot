@@ -2,6 +2,7 @@
 
 import asyncio
 import traceback
+from queue import LifoQueue
 
 from discord import Embed, VoiceClient
 
@@ -41,6 +42,8 @@ class AudioPlayer:
         """
         self.config: Config = config
         self.usage_db: UsageDatabase = usage_db
+        self.prev_songs: list[Song] = []
+        self.push_to_prev_songs: bool = True
         self.current_song: Song = None
         self.voice_client: VoiceClient = None
         self.song_queue: SongQueue = SongQueue(config)
@@ -188,16 +191,25 @@ class AudioPlayer:
             self.record_song_play_to_db(self.current_song), loop=self.event_loop
         )
 
+        if self.push_to_prev_songs:
+            self.prev_songs.append(self.current_song)
+        else:
+            self.push_to_prev_songs = True
+
         self.current_song = None
         self.play_next_song_event.set()
 
-    async def skip(self) -> bool:
+    async def skip(self, back: bool = False) -> bool:
         """Skips the current song and starts playing the next one.
 
         Returns:
             True if the song was skipped successfully; False if there was no song playing.
         """
         if self.voice_client.is_playing():
+            if back:
+                self.song_queue.put_nowait(self.current_song, play_next=True)
+                self.song_queue.put_nowait(self.prev_songs.pop(), play_next=True)
+                self.push_to_prev_songs = False
             self.voice_client.stop()
             return True
         return False

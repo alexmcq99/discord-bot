@@ -271,6 +271,16 @@ class MusicCog(commands.Cog):
         else:
             await ctx.send("Stopped the audio player.")
 
+    @commands.command(name="back")
+    async def back(self, ctx: commands.Context):
+        """Goes back to the previous song."""
+
+        if not ctx.audio_player.prev_songs:
+            return await ctx.send("No song to go back to.")
+
+        if not await ctx.audio_player.skip(back=True):
+            return await ctx.send("Not playing any music right now.")
+
     @commands.command(name="skip")
     async def skip(self, ctx: commands.Context):
         """Skips a song and plays the next one, if any."""

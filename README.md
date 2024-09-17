@@ -51,6 +51,7 @@ The bot currently supports the following commands, using the prefix `-` (configu
 -  `-loop` -- Enable looping the queue until this command is used again.
 -  `-clear` -- Clears the queue, not affecting the song currently playing.
 -  `-skip` -- Skips the song currently playing and plays the next one in the queue.
+-  `-back` -- Goes back to the previous song, if there was one.
 -  `-queue` -- Displays how many songs are in the queue and the first 25 songs (configurable).
 -  `-now` -- Shows the song that's currently playing, if any.
 -  `-status` -- Shows the current status of the bot. I.e., shows the queue, what song is currently playing, and if the queue is looping or not.
