@@ -164,12 +164,7 @@ class Song:
     @property
     def total_time_played(self) -> timedelta:
         """Returns a timedelta object representing the total time the song has been played."""
-        times = list(
-            itertools.zip_longest(self.timestamps_started, self.timestamps_stopped)
-        )
-        print(times)
-
-        x = sum(
+        return sum(
             [
                 (stop or datetime.now()) - start
                 for start, stop in itertools.zip_longest(
@@ -178,10 +173,6 @@ class Song:
             ],
             start=timedelta(),
         )
-        print(x)
-        seconds = x.total_seconds()
-        print(seconds)
-        return x
 
     def create_song_request(self) -> SongRequest:
         """Creates and returns SongRequest object which is inserted into the request table of the usage database."""

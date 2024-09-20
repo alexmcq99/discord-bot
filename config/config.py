@@ -40,7 +40,7 @@ class Config:
         self.max_displayed_songs: int = config_data.get("max_displayed_songs", 25)
         self.playlist_song_limit: int = config_data.get("spotify_song_limit", math.inf)
         self.yt_search_playlist_song_limit: int = config_data.get(
-            "yt_search_playlist_song_limit", 5
+            "yt_search_playlist_song_limit", 10
         )
         self.inactivity_timeout: int = config_data.get("inactivity_timeout", 600)
 
