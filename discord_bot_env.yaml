@@ -1,4 +1,4 @@
-name: discord_bot_env_new
+name: discord_bot_env
 channels:
   - defaults
 dependencies:
@@ -60,4 +60,4 @@ dependencies:
       - uuid6==2024.7.10
       - websockets==13.0.1
       - yarl==1.9.9
-      - yt-dlp==2024.8.6
+      - yt-dlp==2025.1.15
