@@ -53,6 +53,10 @@ class Config:
 
         print(f"spotify song limit: {self.playlist_song_limit}")
 
+        # Youtube
+        self.yt_cookies_file_name: str = "www.youtube.com_cookies.txt"
+        self.yt_cookies_file_path: str = self.yt_cookies_file_name
+
     def load_config_file(self, filename: str) -> dict[str, Any]:
         try:
             with open(filename, encoding="utf-8") as config_file:

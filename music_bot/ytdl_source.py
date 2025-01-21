@@ -215,6 +215,8 @@ class YtdlSourceFactory:
         self.config: Config = config
         self.executor: Executor = executor
 
+        self.YTDL_OPTIONS["cookies"] = config.yt_cookies_file_path
+
     async def process_ytdl_video_source(
         self, ytdl_video_source: YtdlVideoSource
     ) -> None:
