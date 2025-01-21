@@ -230,7 +230,7 @@ class MusicCog(commands.Cog):
 
         print(ctx.audio_player.voice_client)
 
-    @commands.command(name="leave", aliases=["disconnect", "die"])
+    @commands.command(name="leave", aliases=["disconnect", "die", "quit"])
     async def leave(self, ctx: commands.Context):
         """Completely stops the audio player and leaves the voice channel."""
 
